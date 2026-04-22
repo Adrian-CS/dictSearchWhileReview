@@ -231,6 +231,34 @@ def format_local_entries(
     return "<div>" + "".join(parts) + "</div>"
 
 
+def entries_to_choices(entries: Iterable[LocalEntry]) -> List[dict]:
+    """Convierte entradas locales en opciones individuales para el picker."""
+    out: List[dict] = []
+    seen: set = set()
+    for e in entries:
+        for g in e.glossary:
+            key = (e.expression, e.reading, g, e.source)
+            if key in seen:
+                continue
+            seen.add(key)
+            html = (
+                f"<li>{_esc(g)} "
+                f"<span style='color:#888;font-size:0.85em'>"
+                f"— {_esc(e.source)}</span></li>"
+            )
+            out.append(
+                {
+                    "source": f"local:{e.source}",
+                    "word": e.expression,
+                    "reading": e.reading,
+                    "pos": "",
+                    "text": g,
+                    "html": html,
+                }
+            )
+    return out
+
+
 def _esc(s: str) -> str:
     return (
         s.replace("&", "&amp;")

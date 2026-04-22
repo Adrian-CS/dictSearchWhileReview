@@ -10,8 +10,10 @@ Compatible con **Anki 2.1.60+** (Qt6).
 
 ## Características
 
-- Atajo configurable sobre la palabra seleccionada en el reviewer (por
-  defecto `Ctrl+S`) — sin chocar con el atajo de guardar del editor.
+- **Dos atajos configurables** sobre la palabra seleccionada en el reviewer:
+  - `Ctrl+S` (por defecto) — inserción rápida: mete todas las acepciones.
+  - `Ctrl+Shift+S` (por defecto) — **popup de selección**: abre un diálogo
+    con la lista de acepciones y eliges cuál(es) insertar (multi-select).
 - Tres estrategias: `Jisho → Local`, `Solo Jisho`, `Solo Local`.
 - **Mapeo de campos por tipo de nota**: define qué campo usar en cada
   notetype y una lista ordenada de nombres alternativos (`Significado`,
@@ -20,8 +22,8 @@ Compatible con **Anki 2.1.60+** (Qt6).
   Daijirin, Shinmeikai, etc.). Se indexan al arrancar Anki.
 - Modo *append* para no pisar contenido previo del campo.
 - Asíncrono: la petición HTTP no congela la UI.
-- Acción de menú **Buscar selección ahora** (`Ctrl+Shift+J`) por si prefieres
-  no depender del atajo o necesitas diagnosticar.
+- Acciones de menú **Buscar selección ahora** (`Ctrl+Shift+J`) y
+  **Elegir definición (popup)…** (`Ctrl+Shift+K`) como alternativas manuales.
 
 ## Instalación
 
@@ -57,13 +59,15 @@ Copia o enlaza `src/jisho_lookup/` dentro de la carpeta `addons21` de Anki:
 
 1. Abre cualquier mazo y empieza a revisar.
 2. Arrastra con el ratón sobre una palabra japonesa para seleccionarla.
-3. Pulsa tu atajo (por defecto `Ctrl+S`).
-4. Verás un pequeño aviso "Buscando definición…" y, al terminar, el globo
-   de confirmación indicando qué campo se rellenó y con qué fuente
-   (`Jisho` o `diccionario local`).
+3. Pulsa uno de los dos atajos:
+   - **`Ctrl+S`** — inserción directa de todas las acepciones.
+   - **`Ctrl+Shift+S`** — abre un popup con la lista y eliges cuál(es)
+     insertar (Ctrl/Shift+clic para multi-selección, Enter para aceptar).
+4. Verás un aviso "Buscando…" y, al terminar, un globo confirmando el campo
+   rellenado y la fuente (`Jisho` / `diccionario local` / `mezcla`).
 
-Si nada ocurre, usa `Ctrl+Shift+J` (menú **Herramientas → Jisho Lookup →
-Buscar selección ahora**) para descartar problemas del atajo.
+Si nada ocurre, usa `Ctrl+Shift+J` / `Ctrl+Shift+K` (menú **Herramientas →
+Jisho Lookup**) como alternativa manual y para descartar problemas de atajo.
 
 ## Configuración
 

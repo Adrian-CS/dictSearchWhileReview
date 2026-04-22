@@ -90,6 +90,99 @@ def do_lookup(query: str, config: dict) -> Tuple[str, str]:
     return "", ""
 
 
+def collect_choices(query: str, config: dict) -> Tuple[List[dict], str]:
+    """Recopila TODAS las acepciones candidatas para el picker.
+
+    Devuelve `(choices, header_info)`:
+      choices: lista de dicts tal como los produce
+               `jisho_client.entries_to_choices` /
+               `yomitan_reader.entries_to_choices`.
+      header_info: string corto para mostrar en el título del diálogo
+               ej: "食べる 【たべる】" si la primera entrada Jisho lo da.
+
+    Respeta la misma estrategia que `do_lookup`.
+    """
+    query = normalize_query(query)
+    if not query:
+        return [], ""
+
+    strategy = (config.get("strategy") or "jisho_then_local").lower()
+    timeout = float(config.get("jisho_timeout_seconds") or 6)
+    enabled_dicts = config.get("enabled_local_dicts") or []
+
+    choices: List[dict] = []
+    header_word = ""
+    header_reading = ""
+
+    if strategy in ("jisho_then_local", "jisho_only"):
+        entries = jisho_client.search(query, timeout=timeout)
+        if entries:
+            jc = jisho_client.entries_to_choices(entries)
+            choices.extend(jc)
+            # Información de cabecera
+            if entries[0].word:
+                header_word = entries[0].word
+            if entries[0].reading:
+                header_reading = entries[0].reading
+
+    if strategy in ("jisho_then_local", "local_only"):
+        mgr = get_dict_manager(enabled=enabled_dicts if enabled_dicts else None)
+        local = mgr.lookup(query)
+        if local:
+            lc = yomitan_reader.entries_to_choices(local)
+            choices.extend(lc)
+            if not header_word:
+                header_word = local[0].expression
+            if not header_reading:
+                header_reading = local[0].reading
+
+    header_bits: List[str] = []
+    if header_word:
+        header_bits.append(header_word)
+    if header_reading and header_reading != header_word:
+        header_bits.append(f"【{header_reading}】")
+    header_info = " ".join(header_bits) if header_bits else query
+
+    return choices, header_info
+
+
+def format_picked_choices(choices: List[dict], config: dict) -> str:
+    """HTML final para el campo, a partir de una selección del picker."""
+    if not choices:
+        return ""
+
+    include_reading = bool(config.get("include_reading", True))
+
+    # Cabecera a partir de la primera opción
+    first = choices[0]
+    word = first.get("word") or ""
+    reading = first.get("reading") or ""
+
+    parts: List[str] = []
+    head: List[str] = []
+    if word:
+        head.append(f"<b>{_esc_html(word)}</b>")
+    if include_reading and reading and reading != word:
+        head.append(f"【{_esc_html(reading)}】")
+    if head:
+        parts.append("".join(head))
+
+    items = "".join(c.get("html") or "" for c in choices)
+    if items:
+        parts.append("<ol style='margin:4px 0 0 18px;padding:0'>" + items + "</ol>")
+
+    return "<div>" + "".join(parts) + "</div>"
+
+
+def _esc_html(s: str) -> str:
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def pick_target_field(note, config: dict) -> Optional[str]:
     """Decide qué campo rellenar en `note` según `note_type_field_map`.
 

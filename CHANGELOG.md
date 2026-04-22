@@ -3,6 +3,26 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.1.0] - 2026-04-23
+
+### Añadido
+- **Segundo atajo con popup de selección** (por defecto `Ctrl+Shift+S`):
+  abre un diálogo Qt con todas las acepciones encontradas (Jisho + locales)
+  y permite elegir cuál(es) insertar. Multi-selección activada por defecto
+  (Ctrl/Shift+clic), configurable.
+- Nueva acción de menú **Elegir definición (popup)…** (atajo fijo
+  `Ctrl+Shift+K`) como alternativa manual al atajo configurable.
+- Nuevos campos en `config.json`: `picker_shortcut`, `picker_multi_select`.
+- Módulo `picker_dialog.py` con diálogo Qt reutilizable.
+- Helpers `entries_to_choices()` en `jisho_client` y `yomitan_reader`, y
+  `collect_choices()` / `format_picked_choices()` en `lookup.py`.
+
+### Cambiado
+- El listener JS ahora soporta múltiples atajos simultáneos con despacho
+  por `kind` (`run` / `pick`).
+- El diálogo de configuración expone ambos atajos y el checkbox de
+  multi-selección.
+
 ## [1.0.1] - 2026-04-22
 
 ### Arreglado

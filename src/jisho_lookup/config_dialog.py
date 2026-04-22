@@ -43,13 +43,20 @@ class ConfigDialog(QDialog):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        # Atajo + estrategia
+        # Atajos (RUN + PICK)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Atajo:"))
+        row.addWidget(QLabel("Atajo rápido:"))
         self.shortcut_edit = QLineEdit()
         self.shortcut_edit.setPlaceholderText("Ctrl+S")
         self.shortcut_edit.setMaximumWidth(140)
         row.addWidget(self.shortcut_edit)
+
+        row.addSpacing(12)
+        row.addWidget(QLabel("Atajo picker:"))
+        self.picker_shortcut_edit = QLineEdit()
+        self.picker_shortcut_edit.setPlaceholderText("Ctrl+Shift+S")
+        self.picker_shortcut_edit.setMaximumWidth(160)
+        row.addWidget(self.picker_shortcut_edit)
 
         row.addSpacing(12)
         row.addWidget(QLabel("Estrategia:"))
@@ -67,7 +74,9 @@ class ConfigDialog(QDialog):
         self.include_pos_cb = QCheckBox("Incluir categorías gramaticales")
         self.overwrite_cb = QCheckBox("Sobrescribir campo existente")
         self.append_cb = QCheckBox("Añadir al final (no reemplazar)")
-        for cb in (self.include_reading_cb, self.include_pos_cb, self.overwrite_cb, self.append_cb):
+        self.picker_multi_cb = QCheckBox("Picker: multi-selección")
+        for cb in (self.include_reading_cb, self.include_pos_cb, self.overwrite_cb,
+                   self.append_cb, self.picker_multi_cb):
             opts.addWidget(cb)
         opts.addStretch(1)
         layout.addLayout(opts)
@@ -128,6 +137,7 @@ class ConfigDialog(QDialog):
     # --------------------------------------------------------------- state
     def _load_from_config(self) -> None:
         self.shortcut_edit.setText(str(self.config.get("shortcut") or "Ctrl+S"))
+        self.picker_shortcut_edit.setText(str(self.config.get("picker_shortcut") or "Ctrl+Shift+S"))
         strat = (self.config.get("strategy") or "jisho_then_local").lower()
         idx = max(0, self.strategy_combo.findData(strat))
         self.strategy_combo.setCurrentIndex(idx)
@@ -136,6 +146,7 @@ class ConfigDialog(QDialog):
         self.include_pos_cb.setChecked(bool(self.config.get("include_parts_of_speech", True)))
         self.overwrite_cb.setChecked(bool(self.config.get("overwrite_existing", False)))
         self.append_cb.setChecked(bool(self.config.get("append_mode", False)))
+        self.picker_multi_cb.setChecked(bool(self.config.get("picker_multi_select", True)))
 
         fieldmap: Dict[str, List[str]] = dict(self.config.get("note_type_field_map") or {})
         # asegurar _default siempre presente
@@ -253,6 +264,8 @@ class ConfigDialog(QDialog):
         new_conf = dict(self.config)
         new_conf.update({
             "shortcut": self.shortcut_edit.text().strip() or "Ctrl+S",
+            "picker_shortcut": self.picker_shortcut_edit.text().strip() or "Ctrl+Shift+S",
+            "picker_multi_select": self.picker_multi_cb.isChecked(),
             "strategy": self.strategy_combo.currentData(),
             "include_reading": self.include_reading_cb.isChecked(),
             "include_parts_of_speech": self.include_pos_cb.isChecked(),

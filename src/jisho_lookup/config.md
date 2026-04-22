@@ -4,7 +4,9 @@ Selecciona una palabra japonesa mientras revisas una tarjeta y pulsa el atajo (p
 
 ## Opciones
 
-- **shortcut**: combinación de teclas (ej: `Ctrl+S`, `Ctrl+Shift+J`).
+- **shortcut**: atajo para inserción automática (inserta todas las acepciones).
+- **picker_shortcut**: atajo para abrir el *popup* y elegir manualmente qué acepciones insertar (por defecto `Ctrl+Shift+S`).
+- **picker_multi_select**: si `true` permite seleccionar varias acepciones a la vez en el popup.
 - **strategy**: orden de búsqueda.
   - `jisho_then_local` — intenta Jisho online, si falla usa diccionarios locales (recomendado).
   - `local_only` — solo diccionarios locales (offline).

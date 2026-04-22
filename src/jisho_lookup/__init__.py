@@ -25,13 +25,24 @@ def _on_run_now() -> None:
     reviewer.run_from_menu()
 
 
+def _on_pick_now() -> None:
+    reviewer.pick_from_menu()
+
+
 def _build_menu() -> None:
     menu = mw.form.menuTools.addMenu("Jisho Lookup")
 
-    act_run = QAction("Buscar selección ahora", mw)
+    act_run = QAction("Buscar selección ahora (rápido)", mw)
     act_run.setShortcut(QKeySequence("Ctrl+Shift+J"))
     act_run.triggered.connect(_on_run_now)
     menu.addAction(act_run)
+
+    act_pick = QAction("Elegir definición (popup)…", mw)
+    act_pick.setShortcut(QKeySequence("Ctrl+Shift+K"))
+    act_pick.triggered.connect(_on_pick_now)
+    menu.addAction(act_pick)
+
+    menu.addSeparator()
 
     act_conf = QAction("Configuración…", mw)
     act_conf.triggered.connect(_on_open_config)

@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """Integración con el Reviewer.
 
+Dos flujos:
+  1) RUN   — atajo rápido: inserta todas las acepciones automáticamente.
+  2) PICK  — atajo con popup: abre un diálogo para elegir qué acepciones
+             insertar (multi-select).
+
 Por qué captura JS en vez de QShortcut:
   En Anki 2.1.50+ el reviewer usa QWebEngineView, que consume los eventos de
   teclado antes de que lleguen al event filter global. Un QShortcut ligado a
@@ -13,16 +18,18 @@ Por qué captura JS en vez de QShortcut:
 from __future__ import annotations
 
 import json
-from typing import Tuple
+from typing import List, Tuple
 
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 from aqt.operations import QueryOp
 
 from . import lookup
+from . import picker_dialog
 
 
 PYCMD_RUN = "jisho_lookup__run:"
+PYCMD_PICK = "jisho_lookup__pick:"
 
 
 # ---------------------------------------------------------------------------
@@ -53,17 +60,17 @@ def _parse_shortcut(shortcut: str) -> dict:
 
 # ---------------------------------------------------------------------------
 # JavaScript que escucha keydown dentro del WebView
+# Soporta múltiples atajos con un `kind` asociado (run | pick).
 
 
 _JS_TEMPLATE = r"""
 (function() {
-  var sc = %(shortcut_json)s;
-  window.__jishoLookupShortcut = sc;
+  window.__jishoLookupShortcuts = %(shortcuts_json)s;
+  window.__jishoLookupPycmds    = %(pycmds_json)s;
   if (window.__jishoLookupInstalled) { return; }
   window.__jishoLookupInstalled = true;
 
-  function matches(e) {
-    var s = window.__jishoLookupShortcut;
+  function matches(e, s) {
     if (!s || !s.key) return false;
     if (e.ctrlKey  !== s.ctrl)  return false;
     if (e.shiftKey !== s.shift) return false;
@@ -74,13 +81,18 @@ _JS_TEMPLATE = r"""
   }
 
   document.addEventListener("keydown", function(e) {
-    if (!matches(e)) return;
-    var sel = "";
-    try { sel = (window.getSelection() || "").toString(); } catch (err) {}
-    sel = (sel || "").trim();
-    e.preventDefault();
-    e.stopPropagation();
-    pycmd(%(pycmd)s + sel);
+    var all = window.__jishoLookupShortcuts || [];
+    for (var i = 0; i < all.length; i++) {
+      if (!matches(e, all[i])) continue;
+      var sel = "";
+      try { sel = (window.getSelection() || "").toString(); } catch (err) {}
+      sel = (sel || "").trim();
+      e.preventDefault();
+      e.stopPropagation();
+      var prefix = window.__jishoLookupPycmds[all[i].kind] || "";
+      pycmd(prefix + sel);
+      return;
+    }
   }, true);
 })();
 """
@@ -94,10 +106,21 @@ def _inject_listener(*_args, **_kwargs) -> None:
     if reviewer is None or reviewer.web is None:
         return
     cfg = _current_config()
-    sc = _parse_shortcut(cfg.get("shortcut") or "Ctrl+S")
+
+    run_sc = _parse_shortcut(cfg.get("shortcut") or "Ctrl+S")
+    run_sc["kind"] = "run"
+    pick_sc = _parse_shortcut(cfg.get("picker_shortcut") or "Ctrl+Shift+S")
+    pick_sc["kind"] = "pick"
+
+    shortcuts: List[dict] = []
+    if run_sc["key"]:
+        shortcuts.append(run_sc)
+    if pick_sc["key"] and (pick_sc != run_sc):
+        shortcuts.append(pick_sc)
+
     js = _JS_TEMPLATE % {
-        "shortcut_json": json.dumps(sc),
-        "pycmd": json.dumps(PYCMD_RUN),
+        "shortcuts_json": json.dumps(shortcuts),
+        "pycmds_json": json.dumps({"run": PYCMD_RUN, "pick": PYCMD_PICK}),
     }
     try:
         reviewer.web.eval(js)
@@ -110,22 +133,30 @@ def _inject_listener(*_args, **_kwargs) -> None:
 
 
 def _on_js_message(handled: Tuple[bool, object], message: str, context):
-    if not isinstance(message, str) or not message.startswith(PYCMD_RUN):
+    if not isinstance(message, str):
         return handled
-    selected = message[len(PYCMD_RUN):]
-    selected = (selected or "").strip()
-    if not selected:
-        tooltip(
-            "Jisho Lookup: selecciona primero una palabra con el ratón.",
-            period=2500,
-        )
+
+    if message.startswith(PYCMD_RUN):
+        selected = message[len(PYCMD_RUN):].strip()
+        if not selected:
+            tooltip("Jisho Lookup: selecciona primero una palabra con el ratón.", period=2500)
+            return (True, None)
+        _run_lookup_async(selected)
         return (True, None)
-    _run_lookup_async(selected)
-    return (True, None)
+
+    if message.startswith(PYCMD_PICK):
+        selected = message[len(PYCMD_PICK):].strip()
+        if not selected:
+            tooltip("Jisho Lookup: selecciona primero una palabra con el ratón.", period=2500)
+            return (True, None)
+        _run_picker_async(selected)
+        return (True, None)
+
+    return handled
 
 
 # ---------------------------------------------------------------------------
-# Pipeline asíncrono
+# Pipeline RUN — inserción automática
 
 
 def _run_lookup_async(selected: str) -> None:
@@ -145,6 +176,47 @@ def _run_lookup_async(selected: str) -> None:
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
     op.with_progress(label="Buscando definición…").run_in_background()
+
+
+# ---------------------------------------------------------------------------
+# Pipeline PICK — diálogo popup de selección
+
+
+def _run_picker_async(selected: str) -> None:
+    config = _current_config()
+
+    def worker(_col) -> Tuple[str, List[dict], str]:
+        choices, header = lookup.collect_choices(selected, config)
+        return (selected, choices, header)
+
+    def on_done(result: Tuple[str, List[dict], str]) -> None:
+        query, choices, header = result
+        if not choices:
+            if config.get("show_tooltip_on_error", True):
+                tooltip(f"Jisho Lookup: nada encontrado para <b>{query}</b>.", period=3000)
+            return
+        multi = bool(config.get("picker_multi_select", True))
+        picked = picker_dialog.show_picker(
+            choices,
+            header=header or query,
+            multi_select=multi,
+            parent=mw,
+        )
+        if not picked:
+            return
+        html = lookup.format_picked_choices(picked, config)
+        if not html:
+            return
+        # Fuente: si hay mezcla, mostrar 'mixto'; si no, usar la de la primera opción.
+        sources = {c.get("source", "") for c in picked}
+        if len(sources) == 1:
+            src = next(iter(sources))
+        else:
+            src = "varios"
+        _write_to_current_card(query, html, src, config)
+
+    op = QueryOp(parent=mw, op=worker, success=on_done)
+    op.with_progress(label="Buscando acepciones…").run_in_background()
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +269,12 @@ def _write_to_current_card(query: str, html: str, source: str, config: dict) -> 
             pass
 
     if config.get("show_tooltip_on_success", True):
-        origin = {"jisho": "Jisho", "local": "diccionario local"}.get(source, source or "?")
+        origin_map = {
+            "jisho": "Jisho",
+            "local": "diccionario local",
+            "varios": "mezcla de fuentes",
+        }
+        origin = origin_map.get(source, source or "?")
         tooltip(
             f"Jisho Lookup: <b>{query}</b> → campo <b>{field}</b> ({origin}).",
             period=2500,
@@ -214,11 +291,10 @@ def _write_to_current_card(query: str, html: str, source: str, config: dict) -> 
 
 
 # ---------------------------------------------------------------------------
-# Acción manual (útil para diagnóstico y como alternativa al atajo)
+# Acciones manuales (útiles para diagnóstico y como alternativa al atajo)
 
 
-def run_from_menu() -> None:
-    """Lee la selección del webview y lanza la búsqueda sin necesidad de atajo."""
+def _selection_or_tooltip(callback) -> None:
     if mw.state != "review":
         tooltip("Jisho Lookup: debes estar revisando una tarjeta.", period=2500)
         return
@@ -230,17 +306,24 @@ def run_from_menu() -> None:
     def got(sel: str) -> None:
         sel = (sel or "").strip()
         if not sel:
-            tooltip(
-                "Jisho Lookup: selecciona una palabra con el ratón primero.",
-                period=2500,
-            )
+            tooltip("Jisho Lookup: selecciona una palabra con el ratón primero.", period=2500)
             return
-        _run_lookup_async(sel)
+        callback(sel)
 
     try:
         reviewer.web.evalWithCallback("window.getSelection().toString();", got)
     except Exception:
         tooltip("Jisho Lookup: no se pudo leer la selección.", period=2500)
+
+
+def run_from_menu() -> None:
+    """Lee selección y ejecuta la inserción automática (equivalente al atajo RUN)."""
+    _selection_or_tooltip(_run_lookup_async)
+
+
+def pick_from_menu() -> None:
+    """Lee selección y abre el picker (equivalente al atajo PICK)."""
+    _selection_or_tooltip(_run_picker_async)
 
 
 # ---------------------------------------------------------------------------
@@ -258,5 +341,5 @@ def setup() -> None:
 
 
 def reload_shortcut() -> None:
-    """Llamar tras guardar la config para aplicar un nuevo atajo sin reiniciar."""
+    """Llamar tras guardar la config para aplicar atajos nuevos sin reiniciar."""
     _inject_listener()

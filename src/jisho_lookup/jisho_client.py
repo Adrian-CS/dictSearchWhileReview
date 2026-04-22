@@ -111,6 +111,54 @@ def format_entries(
     return "<div>" + "".join(parts) + "</div>"
 
 
+def entries_to_choices(entries: List[JishoEntry]) -> List[dict]:
+    """Aplana las entradas en una lista de "opciones" para el picker.
+
+    Cada opción representa una acepción individual:
+        {
+          "source":  "jisho",
+          "word":    "食べる",
+          "reading": "たべる",
+          "pos":     "Ichidan verb, Transitive verb",
+          "text":    "to eat, to consume",     # texto mostrado al usuario
+          "html":    "<li>...</li>"            # fragmento listo para insertar
+        }
+    """
+    choices: List[dict] = []
+    if not entries:
+        return choices
+
+    # Usamos la primera entrada (la más relevante según Jisho).
+    top = entries[0]
+    for sense in top.senses or []:
+        defs = sense.get("english_definitions") or []
+        if not defs:
+            continue
+        pos_list = sense.get("parts_of_speech") or []
+        pos = ", ".join(pos_list)
+        text = ", ".join(defs)
+
+        html_parts: List[str] = []
+        if pos:
+            html_parts.append(
+                f"<span style='color:#888;font-size:0.9em'>[{_esc(pos)}]</span> "
+            )
+        html_parts.append(_esc(text))
+        html = "<li>" + "".join(html_parts) + "</li>"
+
+        choices.append(
+            {
+                "source": "jisho",
+                "word": top.word,
+                "reading": top.reading,
+                "pos": pos,
+                "text": text,
+                "html": html,
+            }
+        )
+    return choices
+
+
 def _esc(s: str) -> str:
     return (
         s.replace("&", "&amp;")

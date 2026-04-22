@@ -1,5 +1,7 @@
 {
     "shortcut": "Ctrl+S",
+    "picker_shortcut": "Ctrl+Shift+S",
+    "picker_multi_select": true,
     "strategy": "jisho_then_local",
     "jisho_timeout_seconds": 6,
     "max_senses": 3,
