@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Build outputs
+dist/*
+!dist/.gitkeep
+
+# Diccionarios de usuario (Yomichan/Yomitan) — no se redistribuyen
+src/jisho_lookup/dictionaries/*.zip
+
+# IDEs / editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Anki temporales
+*.ankiaddon
+!releases/*.ankiaddon
+
+# Pruebas locales
+scratch/
+tmp/

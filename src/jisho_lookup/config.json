@@ -1,0 +1,16 @@
+{
+    "shortcut": "Ctrl+S",
+    "strategy": "jisho_then_local",
+    "jisho_timeout_seconds": 6,
+    "max_senses": 3,
+    "include_reading": true,
+    "include_parts_of_speech": true,
+    "overwrite_existing": false,
+    "append_mode": false,
+    "note_type_field_map": {
+        "_default": ["Significado", "Meaning", "Definición", "Definition", "Back"]
+    },
+    "enabled_local_dicts": [],
+    "show_tooltip_on_success": true,
+    "show_tooltip_on_error": true
+}

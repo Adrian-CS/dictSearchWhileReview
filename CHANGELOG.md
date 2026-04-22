@@ -1,0 +1,29 @@
+# Changelog
+
+Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
+y versionado con [SemVer](https://semver.org/lang/es/).
+
+## [1.0.1] - 2026-04-22
+
+### Arreglado
+- El atajo no se disparaba dentro del reviewer porque `QWebEngineView` consume
+  los eventos de teclado antes que `QShortcut`. Ahora el listener se instala
+  vía JavaScript directamente en el WebView y se comunica con Python mediante
+  `pycmd` + `webview_did_receive_js_message`.
+
+### Añadido
+- Acción de menú **Herramientas → Jisho Lookup → Buscar selección ahora**
+  (atajo fijo `Ctrl+Shift+J`) como alternativa manual al atajo configurable
+  y como ayuda de diagnóstico.
+- Re-inyección automática del listener al cambiar de estado al reviewer.
+
+## [1.0.0] - 2026-04-22
+
+### Añadido
+- Búsqueda de la palabra seleccionada en Jisho (`jisho.org/api/v1/search/words`)
+  al pulsar `Ctrl+S` durante la revisión.
+- Fallback a diccionarios locales en formato Yomichan / Yomitan (ZIP) cuando
+  Jisho no responde o se usa la estrategia `local_only`.
+- Mapeo configurable de campos por tipo de nota con fallback `_default`.
+- Diálogo Qt de configuración con selección de diccionarios activos.
+- Empaquetado como `.ankiaddon` compatible con Anki 2.1.60+.

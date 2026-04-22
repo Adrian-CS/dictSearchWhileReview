@@ -1,0 +1,184 @@
+# Jisho Lookup — Add-on para Anki
+
+Selecciona una palabra japonesa durante la revisión de una tarjeta, pulsa un
+atajo y el add-on busca su definición y la inserta automáticamente en un
+campo configurable. Funciona con la API pública de [Jisho](https://jisho.org/)
+y, si falla o no hay internet, cae a **diccionarios locales en formato
+Yomichan / Yomitan** que tú mismo proporciones.
+
+Compatible con **Anki 2.1.60+** (Qt6).
+
+## Características
+
+- Atajo configurable sobre la palabra seleccionada en el reviewer (por
+  defecto `Ctrl+S`) — sin chocar con el atajo de guardar del editor.
+- Tres estrategias: `Jisho → Local`, `Solo Jisho`, `Solo Local`.
+- **Mapeo de campos por tipo de nota**: define qué campo usar en cada
+  notetype y una lista ordenada de nombres alternativos (`Significado`,
+  `Meaning`, `Definición`…). Se usa el primero que exista en la tarjeta.
+- **Soporte offline** cargando ZIPs Yomichan/Yomitan (JMdict, Jitendex,
+  Daijirin, Shinmeikai, etc.). Se indexan al arrancar Anki.
+- Modo *append* para no pisar contenido previo del campo.
+- Asíncrono: la petición HTTP no congela la UI.
+- Acción de menú **Buscar selección ahora** (`Ctrl+Shift+J`) por si prefieres
+  no depender del atajo o necesitas diagnosticar.
+
+## Instalación
+
+### Opción A — Desde release (.ankiaddon)
+
+1. Descarga el último `.ankiaddon` de la [página de releases](../../releases).
+2. En Anki: `Herramientas → Add-ons → Instalar desde archivo…` y selecciona
+   el `.ankiaddon`.
+3. Reinicia Anki.
+
+### Opción B — Desde código
+
+```bash
+git clone <URL-DEL-REPO> anki-jisho-lookup
+cd anki-jisho-lookup
+python3 build.py
+# Genera dist/jisho_lookup-<version>.ankiaddon
+```
+
+Luego instálalo desde Anki como en la opción A.
+
+### Opción C — Enlace simbólico para desarrollo
+
+Copia o enlaza `src/jisho_lookup/` dentro de la carpeta `addons21` de Anki:
+
+| Sistema  | Ruta                                                  |
+|----------|-------------------------------------------------------|
+| Windows  | `%APPDATA%\Anki2\addons21\jisho_lookup`               |
+| macOS    | `~/Library/Application Support/Anki2/addons21/jisho_lookup` |
+| Linux    | `~/.local/share/Anki2/addons21/jisho_lookup`          |
+
+## Uso
+
+1. Abre cualquier mazo y empieza a revisar.
+2. Arrastra con el ratón sobre una palabra japonesa para seleccionarla.
+3. Pulsa tu atajo (por defecto `Ctrl+S`).
+4. Verás un pequeño aviso "Buscando definición…" y, al terminar, el globo
+   de confirmación indicando qué campo se rellenó y con qué fuente
+   (`Jisho` o `diccionario local`).
+
+Si nada ocurre, usa `Ctrl+Shift+J` (menú **Herramientas → Jisho Lookup →
+Buscar selección ahora**) para descartar problemas del atajo.
+
+## Configuración
+
+`Herramientas → Jisho Lookup → Configuración…`
+
+- **Atajo**: cualquier combinación tipo `Ctrl+S`, `Ctrl+Shift+J`, `Alt+D`.
+- **Estrategia**:
+  - `jisho_then_local` (recomendada) — prueba Jisho, fallback local.
+  - `local_only` — todo offline.
+  - `jisho_only` — solo online, sin fallback.
+- **Mapeo de campos por tipo de nota**: tabla con filas
+  `notetype → lista de nombres de campo`. La fila especial `_default` se
+  usa cuando el notetype actual no tiene regla propia.
+- **Diccionarios locales**: lista con checkboxes de los ZIPs encontrados
+  en `src/jisho_lookup/dictionaries/` (o en la carpeta equivalente del
+  add-on instalado). Si ninguno está marcado se interpreta como "todos".
+- **Sobrescribir** / **Añadir al final**: comportamiento cuando el campo
+  destino ya tiene contenido.
+- **Incluir lectura** / **Incluir categorías gramaticales**: formato del
+  resultado insertado.
+
+Ejemplo de `note_type_field_map`:
+
+```json
+{
+    "Japanese":                 ["Significado"],
+    "Core 2k/6k Optimized":     ["Meaning", "Vocabulary-English"],
+    "Basic":                    ["Back"],
+    "_default":                 ["Significado", "Meaning", "Definición"]
+}
+```
+
+## Diccionarios locales (Yomichan / Yomitan)
+
+Coloca tus ZIPs dentro de `src/jisho_lookup/dictionaries/` (o
+`.../addons21/jisho_lookup/dictionaries/` una vez instalado):
+
+```
+dictionaries/
+    jmdict_english.zip
+    jitendex.zip
+    daijirin.zip
+```
+
+Puedes obtenerlos desde la comunidad de Yomitan. El add-on indexa al
+arrancar Anki, soporta tanto el formato clásico (`glossary` como lista
+de strings) como el moderno `structured-content`, y consulta todos los
+activos simultáneamente.
+
+## Desarrollo
+
+### Estructura del repo
+
+```
+├── src/
+│   └── jisho_lookup/        # código fuente del add-on
+│       ├── __init__.py
+│       ├── manifest.json
+│       ├── config.json
+│       ├── config.md
+│       ├── reviewer.py      # hook del reviewer + keydown JS
+│       ├── lookup.py        # orquestador búsqueda → campo
+│       ├── jisho_client.py  # cliente HTTP a Jisho
+│       ├── yomitan_reader.py# parser de ZIPs Yomichan/Yomitan
+│       ├── config_dialog.py # diálogo Qt de configuración
+│       └── dictionaries/    # ZIPs de usuario (gitignored)
+├── build.py                 # empaqueta src/ → dist/*.ankiaddon
+├── .github/workflows/
+│   └── release.yml          # CI: adjunta .ankiaddon a cada release tag
+├── README.md
+├── CHANGELOG.md
+└── LICENSE
+```
+
+### Construir el paquete
+
+```bash
+python3 build.py
+# dist/jisho_lookup-1.0.1.ankiaddon
+```
+
+### Publicar en GitHub por primera vez
+
+Desde la raíz del proyecto:
+
+```bash
+git init -b main
+git add -A
+git commit -m "Initial commit: Jisho Lookup v1.0.1"
+
+# Sustituye por la URL de tu repo vacío creado en GitHub
+git remote add origin https://github.com/<usuario>/<repo>.git
+git push -u origin main
+```
+
+### Publicar una release
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+El workflow `.github/workflows/release.yml` construye el `.ankiaddon` y lo
+adjunta automáticamente al release de GitHub.
+
+## Limitaciones conocidas
+
+- La API de Jisho es pública pero no oficial: puede rate-limitar o cambiar.
+  Por eso existe el fallback local.
+- El atajo se captura vía JavaScript dentro del WebView (necesario porque
+  `QWebEngineView` absorbe los eventos de teclado antes que `QShortcut`),
+  así que sólo funciona durante la revisión, no en el editor ni en el browser.
+- Los diccionarios Yomichan/Yomitan se cargan en memoria al primer uso;
+  con muchos diccionarios grandes puede costar 1-3 s la primera búsqueda.
+
+## Licencia
+
+MIT — ver [LICENSE](./LICENSE).
