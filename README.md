@@ -1,10 +1,11 @@
 # Jisho Lookup — Add-on para Anki
 
-Selecciona una palabra japonesa durante la revisión de una tarjeta, pulsa un
-atajo y el add-on busca su definición y la inserta automáticamente en un
-campo configurable. Funciona con la API pública de [Jisho](https://jisho.org/)
-y, si falla o no hay internet, cae a **diccionarios locales en formato
-Yomichan / Yomitan** que tú mismo proporciones.
+Selecciona una palabra durante la revisión de una tarjeta, pulsa un atajo y
+el add-on busca su definición y la inserta automáticamente en un campo
+configurable. Soporta **cuatro pares de idioma** (ja↔en, es↔en) con
+[Jisho](https://jisho.org/) para japonés y [Wiktionary](https://wiktionary.org/)
+para español, con *fallback* a **diccionarios locales Yomichan / Yomitan**
+que tú mismo proporciones.
 
 Compatible con **Anki 2.1.60+** (Qt6).
 
@@ -12,16 +13,22 @@ Compatible con **Anki 2.1.60+** (Qt6).
 
 - **Dos atajos configurables** sobre la palabra seleccionada en el reviewer:
   - `Ctrl+S` (por defecto) — inserción rápida: mete todas las acepciones.
-  - `Ctrl+Shift+S` (por defecto) — **popup de selección**: abre un diálogo
-    con la lista de acepciones y eliges cuál(es) insertar (multi-select).
-- Tres estrategias: `Jisho → Local`, `Solo Jisho`, `Solo Local`.
+  - `Ctrl+Shift+S` (por defecto) — **popup de selección**: elige campo,
+    modo (sustituir / añadir), idioma y qué acepciones insertar.
+- **Pares de idioma**: `ja→en`, `en→ja`, `es→en`, `en→es`. Se elige uno por
+  defecto en la configuración y puede cambiarse por-uso en el popup.
+- **Auto-detección** de idioma en el atajo rápido: si el par por defecto
+  no devuelve nada, re-intenta con el par auto-detectado (CJK → ja,
+  marcas españolas → es, Latin → en).
+- Tres estrategias: `Online → Local`, `Solo online`, `Solo local`.
 - **Mapeo de campos por tipo de nota**: define qué campo usar en cada
   notetype y una lista ordenada de nombres alternativos (`Significado`,
   `Meaning`, `Definición`…). Se usa el primero que exista en la tarjeta.
+  Desde el popup puedes elegir cualquier otro campo por-uso.
 - **Soporte offline** cargando ZIPs Yomichan/Yomitan (JMdict, Jitendex,
   Daijirin, Shinmeikai, etc.). Se indexan al arrancar Anki.
-- Modo *append* para no pisar contenido previo del campo.
-- Asíncrono: la petición HTTP no congela la UI.
+- Modos *sustituir* / *append* configurables globalmente y por-uso en el popup.
+- Asíncrono: las peticiones HTTP no congelan la UI.
 - Acciones de menú **Buscar selección ahora** (`Ctrl+Shift+J`) y
   **Elegir definición (popup)…** (`Ctrl+Shift+K`) como alternativas manuales.
 
@@ -75,9 +82,15 @@ Jisho Lookup**) como alternativa manual y para descartar problemas de atajo.
 
 - **Atajo**: cualquier combinación tipo `Ctrl+S`, `Ctrl+Shift+J`, `Alt+D`.
 - **Estrategia**:
-  - `jisho_then_local` (recomendada) — prueba Jisho, fallback local.
+  - `jisho_then_local` (recomendada) — prueba online, fallback local.
   - `local_only` — todo offline.
   - `jisho_only` — solo online, sin fallback.
+- **Par de idioma (por defecto)**: `ja_en`, `en_ja`, `es_en`, `en_es`. Se
+  elige en la configuración y determina qué fuente online se usa
+  (Jisho para pares japoneses, Wiktionary para pares españoles).
+- **Auto-detectar idioma si el par por defecto no da resultados**: si
+  está activo, el atajo rápido re-intenta con el par auto-detectado
+  cuando el par por defecto no encuentra nada.
 - **Mapeo de campos por tipo de nota**: tabla con filas
   `notetype → lista de nombres de campo`. La fila especial `_default` se
   usa cuando el notetype actual no tiene regla propia.
@@ -130,8 +143,11 @@ activos simultáneamente.
 │       ├── config.md
 │       ├── reviewer.py      # hook del reviewer + keydown JS
 │       ├── lookup.py        # orquestador búsqueda → campo
-│       ├── jisho_client.py  # cliente HTTP a Jisho
+│       ├── lang.py          # pares de idioma + auto-detección
+│       ├── jisho_client.py  # cliente HTTP a Jisho (ja↔en)
+│       ├── wiktionary_client.py  # cliente HTTP a Wiktionary (es↔en)
 │       ├── yomitan_reader.py# parser de ZIPs Yomichan/Yomitan
+│       ├── picker_dialog.py # popup Qt de selección
 │       ├── config_dialog.py # diálogo Qt de configuración
 │       └── dictionaries/    # ZIPs de usuario (gitignored)
 ├── build.py                 # empaqueta src/ → dist/*.ankiaddon

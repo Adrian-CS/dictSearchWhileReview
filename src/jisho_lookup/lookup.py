@@ -1,12 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Orquestador: recibe una palabra, busca definición, escribe al campo."""
+"""Orquestador: recibe una palabra, busca definición, escribe al campo.
+
+Soporta varios pares de idioma (ver `lang.py`). El par se elige así:
+
+* Para el **popup** (selector de definición) siempre viene explícito, elegido
+  por el usuario en el combo del diálogo.
+* Para el **atajo rápido** (`do_lookup_auto`), usa el par global configurado
+  y, si no encuentra nada, re-intenta con el par auto-detectado a partir
+  del texto (siempre que ese par sea distinto).
+"""
 
 from __future__ import annotations
 
 import os
 from typing import List, Optional, Tuple
 
-from . import jisho_client, yomitan_reader
+from . import jisho_client, wiktionary_client, yomitan_reader
+from . import lang
 
 
 ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,52 +40,83 @@ def reset_dict_manager() -> None:
     _DICT_MANAGER = None
 
 
-# Normaliza la selección: quita signos de puntuación japoneses comunes
-_TRIM_CHARS = "。、！？「」『』（）【】［］〈〉《》,.!?()[] \t\r\n\u3000"
+# Normaliza la selección: quita signos de puntuación comunes (JP + latinos)
+_TRIM_CHARS = (
+    "。、！？「」『』（）【】［］〈〉《》"
+    ",.!?;:()[]{}\"'«»¡¿"
+    " \t\r\n\u3000"
+)
 
 
 def normalize_query(text: str) -> str:
     if not text:
         return ""
-    # strip de puntuación en extremos
     cleaned = text.strip(_TRIM_CHARS)
-    # si tras limpiar queda vacío, devolver original sin saltos de línea
     return cleaned or text.strip()
 
 
-def do_lookup(query: str, config: dict) -> Tuple[str, str]:
-    """Devuelve (html_resultado, fuente). html vacío si nada encontrado.
+# ---------------------------------------------------------------------------
+# Búsqueda por par concreto (sin auto-detect)
 
-    `fuente` ∈ {"jisho", "local", ""}. Usado sólo para mensajes de UI.
+
+def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str, str]:
+    """Busca en el par `pair` (o el global si None).
+
+    Devuelve (html_resultado, fuente). Fuentes posibles:
+      "jisho" | "wiktionary" | "local" | ""
     """
     query = normalize_query(query)
     if not query:
         return "", ""
 
+    pair_id = lang.normalize_pair(pair or config.get("language_pair"))
+    src, tgt = lang.pair_parts(pair_id)
     strategy = (config.get("strategy") or "jisho_then_local").lower()
-    timeout = float(config.get("jisho_timeout_seconds") or 6)
+    online_sources = lang.sources_for_pair(pair_id)
+
+    jisho_timeout = float(config.get("jisho_timeout_seconds") or 6)
+    wikt_timeout = float(config.get("wiktionary_timeout_seconds") or 6)
     max_senses = int(config.get("max_senses") or 3)
     include_reading = bool(config.get("include_reading", True))
     include_pos = bool(config.get("include_parts_of_speech", True))
     enabled_dicts = config.get("enabled_local_dicts") or []
 
-    # 1) Jisho
-    if strategy in ("jisho_then_local", "jisho_only"):
-        entries = jisho_client.search(query, timeout=timeout)
-        if entries:
-            html = jisho_client.format_entries(
-                entries,
-                max_senses=max_senses,
-                include_reading=include_reading,
-                include_parts_of_speech=include_pos,
+    want_online = strategy in ("jisho_then_local", "jisho_only")
+    want_local = strategy in ("jisho_then_local", "local_only")
+
+    # 1) Fuente online según par
+    if want_online:
+        if "jisho" in online_sources:
+            entries = jisho_client.search(query, timeout=jisho_timeout)
+            if entries:
+                html = jisho_client.format_entries(
+                    entries,
+                    max_senses=max_senses,
+                    include_reading=include_reading,
+                    include_parts_of_speech=include_pos,
+                )
+                if html:
+                    return html, "jisho"
+        if "wiktionary" in online_sources:
+            wentries = wiktionary_client.search(
+                query, src=src, tgt=tgt, timeout=wikt_timeout
             )
-            if html:
-                return html, "jisho"
+            if wentries:
+                html = wiktionary_client.format_entries(
+                    wentries,
+                    max_senses=max_senses,
+                    include_reading=include_reading,
+                    include_parts_of_speech=include_pos,
+                )
+                if html:
+                    return html, "wiktionary"
         if strategy == "jisho_only":
             return "", ""
 
-    # 2) Diccionarios locales
-    if strategy in ("jisho_then_local", "local_only"):
+    # 2) Diccionarios locales (sólo para pares con componente japonés, ya que
+    # los diccionarios Yomichan/Yomitan actuales son JP↔EN). Igualmente
+    # intentamos por si el usuario ha cargado algo útil.
+    if want_local:
         mgr = get_dict_manager(enabled=enabled_dicts if enabled_dicts else None)
         local = mgr.lookup(query)
         if local:
@@ -90,47 +131,85 @@ def do_lookup(query: str, config: dict) -> Tuple[str, str]:
     return "", ""
 
 
-def collect_choices(query: str, config: dict) -> Tuple[List[dict], str]:
+def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
+    """Variante para el atajo rápido con fallback por auto-detect.
+
+    Intenta primero el par global; si no encuentra nada y la config permite
+    `language_pair_auto_fallback`, re-intenta con el par auto-detectado
+    (siempre que sea distinto).
+
+    Devuelve (html, fuente, pair_id_usado).
+    """
+    global_pair = lang.normalize_pair(config.get("language_pair"))
+    html, source = do_lookup(query, config, pair=global_pair)
+    if html:
+        return html, source, global_pair
+
+    if not bool(config.get("language_pair_auto_fallback", True)):
+        return "", "", global_pair
+
+    detected = lang.auto_detect_pair(query, global_pair=global_pair)
+    if detected == global_pair:
+        return "", "", global_pair
+
+    html, source = do_lookup(query, config, pair=detected)
+    return html, source, (detected if html else global_pair)
+
+
+# ---------------------------------------------------------------------------
+# Recolección de "choices" para el picker
+
+
+def collect_choices(
+    query: str, config: dict, pair: Optional[str] = None
+) -> Tuple[List[dict], str]:
     """Recopila TODAS las acepciones candidatas para el picker.
 
-    Devuelve `(choices, header_info)`:
-      choices: lista de dicts tal como los produce
-               `jisho_client.entries_to_choices` /
-               `yomitan_reader.entries_to_choices`.
-      header_info: string corto para mostrar en el título del diálogo
-               ej: "食べる 【たべる】" si la primera entrada Jisho lo da.
-
-    Respeta la misma estrategia que `do_lookup`.
+    Devuelve `(choices, header_info)`.
     """
     query = normalize_query(query)
     if not query:
         return [], ""
 
+    pair_id = lang.normalize_pair(pair or config.get("language_pair"))
+    src, tgt = lang.pair_parts(pair_id)
     strategy = (config.get("strategy") or "jisho_then_local").lower()
-    timeout = float(config.get("jisho_timeout_seconds") or 6)
+    online_sources = lang.sources_for_pair(pair_id)
+
+    jisho_timeout = float(config.get("jisho_timeout_seconds") or 6)
+    wikt_timeout = float(config.get("wiktionary_timeout_seconds") or 6)
     enabled_dicts = config.get("enabled_local_dicts") or []
+
+    want_online = strategy in ("jisho_then_local", "jisho_only")
+    want_local = strategy in ("jisho_then_local", "local_only")
 
     choices: List[dict] = []
     header_word = ""
     header_reading = ""
 
-    if strategy in ("jisho_then_local", "jisho_only"):
-        entries = jisho_client.search(query, timeout=timeout)
-        if entries:
-            jc = jisho_client.entries_to_choices(entries)
-            choices.extend(jc)
-            # Información de cabecera
-            if entries[0].word:
-                header_word = entries[0].word
-            if entries[0].reading:
-                header_reading = entries[0].reading
+    if want_online:
+        if "jisho" in online_sources:
+            entries = jisho_client.search(query, timeout=jisho_timeout)
+            if entries:
+                choices.extend(jisho_client.entries_to_choices(entries))
+                if entries[0].word:
+                    header_word = entries[0].word
+                if entries[0].reading:
+                    header_reading = entries[0].reading
+        if "wiktionary" in online_sources:
+            wentries = wiktionary_client.search(
+                query, src=src, tgt=tgt, timeout=wikt_timeout
+            )
+            if wentries:
+                choices.extend(wiktionary_client.entries_to_choices(wentries))
+                if not header_word and wentries[0].word:
+                    header_word = wentries[0].word
 
-    if strategy in ("jisho_then_local", "local_only"):
+    if want_local:
         mgr = get_dict_manager(enabled=enabled_dicts if enabled_dicts else None)
         local = mgr.lookup(query)
         if local:
-            lc = yomitan_reader.entries_to_choices(local)
-            choices.extend(lc)
+            choices.extend(yomitan_reader.entries_to_choices(local))
             if not header_word:
                 header_word = local[0].expression
             if not header_reading:
@@ -153,7 +232,6 @@ def format_picked_choices(choices: List[dict], config: dict) -> str:
 
     include_reading = bool(config.get("include_reading", True))
 
-    # Cabecera a partir de la primera opción
     first = choices[0]
     word = first.get("word") or ""
     reading = first.get("reading") or ""
@@ -208,3 +286,36 @@ def pick_target_field(note, config: dict) -> Optional[str]:
         if name in note_fields:
             return name
     return None
+
+
+def available_field_candidates(note, config: dict) -> List[str]:
+    """Devuelve la lista ordenada de candidatos válidos para el picker.
+
+    El diálogo permite cambiar manualmente el campo destino; mostramos
+    primero los candidatos definidos en `note_type_field_map` y después
+    el resto de campos de la tarjeta.
+    """
+    try:
+        model = note.note_type() or {}
+    except Exception:
+        model = getattr(note, "model", lambda: {})() or {}
+
+    model_name = model.get("name", "") if isinstance(model, dict) else ""
+    fieldmap = config.get("note_type_field_map") or {}
+
+    preferred: List[str] = []
+    if model_name and model_name in fieldmap:
+        preferred.extend(fieldmap[model_name] or [])
+    preferred.extend(fieldmap.get("_default") or [])
+
+    note_fields = list(note.keys())
+    present = [f for f in preferred if f in note_fields]
+    rest = [f for f in note_fields if f not in present]
+    # dedup preservando orden
+    seen = set()
+    out: List[str] = []
+    for name in present + rest:
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out

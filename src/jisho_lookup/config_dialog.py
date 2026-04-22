@@ -24,6 +24,7 @@ from aqt.qt import (
 )
 
 from . import lookup
+from . import lang
 
 
 DEFAULT_KEY = "_default"
@@ -61,12 +62,29 @@ class ConfigDialog(QDialog):
         row.addSpacing(12)
         row.addWidget(QLabel("Estrategia:"))
         self.strategy_combo = QComboBox()
-        self.strategy_combo.addItem("Jisho → Local (fallback)", "jisho_then_local")
+        self.strategy_combo.addItem("Online → Local (fallback)", "jisho_then_local")
         self.strategy_combo.addItem("Solo local", "local_only")
-        self.strategy_combo.addItem("Solo Jisho", "jisho_only")
+        self.strategy_combo.addItem("Solo online", "jisho_only")
         row.addWidget(self.strategy_combo)
         row.addStretch(1)
         layout.addLayout(row)
+
+        # Idioma por defecto + auto-fallback
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel("Par de idioma (por defecto):"))
+        self.lang_combo = QComboBox()
+        for pid in lang.all_pair_ids():
+            self.lang_combo.addItem(lang.pair_label(pid), pid)
+        lang_row.addWidget(self.lang_combo)
+
+        self.auto_fallback_cb = QCheckBox(
+            "Auto-detectar idioma si el par por defecto no da resultados "
+            "(sólo en el atajo rápido)"
+        )
+        lang_row.addSpacing(12)
+        lang_row.addWidget(self.auto_fallback_cb)
+        lang_row.addStretch(1)
+        layout.addLayout(lang_row)
 
         # Opciones booleanas
         opts = QHBoxLayout()
@@ -141,6 +159,13 @@ class ConfigDialog(QDialog):
         strat = (self.config.get("strategy") or "jisho_then_local").lower()
         idx = max(0, self.strategy_combo.findData(strat))
         self.strategy_combo.setCurrentIndex(idx)
+
+        pair = lang.normalize_pair(self.config.get("language_pair"))
+        pidx = max(0, self.lang_combo.findData(pair))
+        self.lang_combo.setCurrentIndex(pidx)
+        self.auto_fallback_cb.setChecked(
+            bool(self.config.get("language_pair_auto_fallback", True))
+        )
 
         self.include_reading_cb.setChecked(bool(self.config.get("include_reading", True)))
         self.include_pos_cb.setChecked(bool(self.config.get("include_parts_of_speech", True)))
@@ -267,6 +292,8 @@ class ConfigDialog(QDialog):
             "picker_shortcut": self.picker_shortcut_edit.text().strip() or "Ctrl+Shift+S",
             "picker_multi_select": self.picker_multi_cb.isChecked(),
             "strategy": self.strategy_combo.currentData(),
+            "language_pair": self.lang_combo.currentData() or lang.DEFAULT_PAIR,
+            "language_pair_auto_fallback": self.auto_fallback_cb.isChecked(),
             "include_reading": self.include_reading_cb.isChecked(),
             "include_parts_of_speech": self.include_pos_cb.isChecked(),
             "overwrite_existing": self.overwrite_cb.isChecked(),

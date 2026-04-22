@@ -2,9 +2,14 @@
 """Integración con el Reviewer.
 
 Dos flujos:
-  1) RUN   — atajo rápido: inserta todas las acepciones automáticamente.
-  2) PICK  — atajo con popup: abre un diálogo para elegir qué acepciones
-             insertar (multi-select).
+  1) RUN   — atajo rápido: inserta todas las acepciones automáticamente,
+             usando el par de idioma global y, si no encuentra nada,
+             re-intentando con el par auto-detectado (si está activado).
+  2) PICK  — atajo con popup: abre un diálogo con:
+               * combo de campo destino
+               * radios Sustituir / Añadir
+               * combo de par de idioma (recarga en vivo)
+               * lista de acepciones (multi-selección opcional)
 
 Por qué captura JS en vez de QShortcut:
   En Anki 2.1.50+ el reviewer usa QWebEngineView, que consume los eventos de
@@ -18,12 +23,13 @@ Por qué captura JS en vez de QShortcut:
 from __future__ import annotations
 
 import json
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 from aqt.operations import QueryOp
 
+from . import lang
 from . import lookup
 from . import picker_dialog
 
@@ -156,23 +162,28 @@ def _on_js_message(handled: Tuple[bool, object], message: str, context):
 
 
 # ---------------------------------------------------------------------------
-# Pipeline RUN — inserción automática
+# Pipeline RUN — inserción automática (con fallback auto-detect)
 
 
 def _run_lookup_async(selected: str) -> None:
     config = _current_config()
 
-    def worker(_col) -> Tuple[str, str, str]:
-        html, source = lookup.do_lookup(selected, config)
-        return (selected, html, source)
+    def worker(_col) -> Tuple[str, str, str, str]:
+        html, source, used_pair = lookup.do_lookup_auto(selected, config)
+        return (selected, html, source, used_pair)
 
-    def on_done(result: Tuple[str, str, str]) -> None:
-        query, html, source = result
+    def on_done(result: Tuple[str, str, str, str]) -> None:
+        query, html, source, used_pair = result
         if not html:
             if config.get("show_tooltip_on_error", True):
-                tooltip(f"Jisho Lookup: nada encontrado para <b>{query}</b>.", period=3000)
+                tooltip(
+                    f"Jisho Lookup: nada encontrado para <b>{query}</b>.",
+                    period=3000,
+                )
             return
-        _write_to_current_card(query, html, source, config)
+        _write_to_current_card(
+            query, html, source, config, used_pair=used_pair
+        )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
     op.with_progress(label="Buscando definición…").run_in_background()
@@ -184,36 +195,87 @@ def _run_lookup_async(selected: str) -> None:
 
 def _run_picker_async(selected: str) -> None:
     config = _current_config()
+    initial_pair = lang.normalize_pair(config.get("language_pair"))
 
     def worker(_col) -> Tuple[str, List[dict], str]:
-        choices, header = lookup.collect_choices(selected, config)
+        choices, header = lookup.collect_choices(selected, config, pair=initial_pair)
         return (selected, choices, header)
 
     def on_done(result: Tuple[str, List[dict], str]) -> None:
         query, choices, header = result
-        if not choices:
-            if config.get("show_tooltip_on_error", True):
-                tooltip(f"Jisho Lookup: nada encontrado para <b>{query}</b>.", period=3000)
-            return
+
+        # Construimos el callback de recarga para cambiar idioma en vivo.
+        def reload_fn(pair_id: str) -> Tuple[List[dict], str]:
+            try:
+                return lookup.collect_choices(query, _current_config(), pair=pair_id)
+            except Exception:
+                return [], ""
+
+        # Campos candidatos (según la tarjeta actual)
+        field_candidates: List[str] = []
+        initial_field: Optional[str] = None
+        reviewer = mw.reviewer
+        if reviewer is not None and reviewer.card is not None:
+            note = reviewer.card.note()
+            field_candidates = lookup.available_field_candidates(note, config)
+            initial_field = lookup.pick_target_field(note, config)
+
+        initial_mode = (
+            "append"
+            if bool(config.get("append_mode", False))
+            and not bool(config.get("overwrite_existing", False))
+            else "overwrite"
+        )
+
         multi = bool(config.get("picker_multi_select", True))
-        picked = picker_dialog.show_picker(
+
+        if not choices:
+            # Aun así abrimos el diálogo para permitir cambiar de idioma.
+            if config.get("show_tooltip_on_error", True):
+                tooltip(
+                    f"Jisho Lookup: nada encontrado para <b>{query}</b>. "
+                    "Prueba a cambiar de idioma en el popup.",
+                    period=2500,
+                )
+
+        bundle = picker_dialog.show_picker(
             choices,
             header=header or query,
             multi_select=multi,
+            field_candidates=field_candidates,
+            initial_field=initial_field,
+            initial_mode=initial_mode,
+            initial_pair=initial_pair,
+            reload_fn=reload_fn,
             parent=mw,
         )
-        if not picked:
+        if not bundle:
             return
+
+        picked = bundle["picked"]
+        chosen_field = bundle["field"]
+        chosen_mode = bundle["mode"]
+        chosen_pair = bundle["pair"]
+
         html = lookup.format_picked_choices(picked, config)
         if not html:
             return
-        # Fuente: si hay mezcla, mostrar 'mixto'; si no, usar la de la primera opción.
+
         sources = {c.get("source", "") for c in picked}
         if len(sources) == 1:
             src = next(iter(sources))
         else:
             src = "varios"
-        _write_to_current_card(query, html, src, config)
+
+        _write_to_current_card(
+            query,
+            html,
+            src,
+            config,
+            used_pair=chosen_pair,
+            override_field=chosen_field,
+            override_mode=chosen_mode,
+        )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
     op.with_progress(label="Buscando acepciones…").run_in_background()
@@ -223,14 +285,28 @@ def _run_picker_async(selected: str) -> None:
 # Escritura al campo
 
 
-def _write_to_current_card(query: str, html: str, source: str, config: dict) -> None:
+def _write_to_current_card(
+    query: str,
+    html: str,
+    source: str,
+    config: dict,
+    *,
+    used_pair: Optional[str] = None,
+    override_field: Optional[str] = None,
+    override_mode: Optional[str] = None,  # "overwrite" | "append" | None
+) -> None:
     reviewer = mw.reviewer
     if reviewer is None or reviewer.card is None:
         return
     card = reviewer.card
     note = card.note()
 
-    field = lookup.pick_target_field(note, config)
+    # 1) Campo
+    if override_field and override_field in note.keys():
+        field = override_field
+    else:
+        field = lookup.pick_target_field(note, config)
+
     if field is None:
         model = note.note_type() or {}
         model_name = model.get("name", "(desconocido)") if isinstance(model, dict) else "(desconocido)"
@@ -243,14 +319,21 @@ def _write_to_current_card(query: str, html: str, source: str, config: dict) -> 
         )
         return
 
+    # 2) Modo de escritura
+    if override_mode is not None:
+        overwrite = override_mode == "overwrite"
+        append = override_mode == "append"
+    else:
+        overwrite = bool(config.get("overwrite_existing", False))
+        append = bool(config.get("append_mode", False))
+
     current = note[field] or ""
-    overwrite = bool(config.get("overwrite_existing", False))
-    append = bool(config.get("append_mode", False))
 
     if current.strip() and not overwrite and not append:
         tooltip(
             f"Jisho Lookup: <b>{field}</b> ya tiene contenido. "
-            "Activa 'sobrescribir' o 'añadir al final' en la configuración.",
+            "Activa 'sobrescribir' o 'añadir al final' en la configuración "
+            "(o usa el popup para elegir modo).",
             period=4000,
         )
         return
@@ -271,16 +354,21 @@ def _write_to_current_card(query: str, html: str, source: str, config: dict) -> 
     if config.get("show_tooltip_on_success", True):
         origin_map = {
             "jisho": "Jisho",
+            "wiktionary": "Wiktionary",
             "local": "diccionario local",
             "varios": "mezcla de fuentes",
         }
         origin = origin_map.get(source, source or "?")
+        pair_suffix = ""
+        if used_pair:
+            pair_suffix = f" · {lang.pair_label(used_pair)}"
         tooltip(
-            f"Jisho Lookup: <b>{query}</b> → campo <b>{field}</b> ({origin}).",
+            f"Jisho Lookup: <b>{query}</b> → campo <b>{field}</b> "
+            f"({origin}{pair_suffix}).",
             period=2500,
         )
 
-    # Refrescar la vista si ya se mostró la respuesta, para reflejar el nuevo contenido.
+    # Refrescar la vista si ya se mostró la respuesta.
     try:
         if reviewer.state == "answer":
             reviewer._showAnswer()
