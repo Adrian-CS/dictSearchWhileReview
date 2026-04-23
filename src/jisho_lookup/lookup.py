@@ -225,29 +225,117 @@ def collect_choices(
     return choices, header_info
 
 
-def format_picked_choices(choices: List[dict], config: dict) -> str:
-    """HTML final para el campo, a partir de una selección del picker."""
+def format_picked_choices(
+    choices: List[dict],
+    config: dict,
+    *,
+    pair: Optional[str] = None,
+    include_pos: Optional[bool] = None,
+    include_reading: Optional[bool] = None,
+) -> str:
+    """HTML final para el campo, a partir de una selección del picker.
+
+    Reglas de formato:
+
+    * Si todas las opciones comparten la misma palabra (caso típico en
+      `ja→en`, el usuario elige varias acepciones del mismo verbo), se
+      emite una cabecera única y una lista con las acepciones.
+    * Si las opciones abarcan palabras distintas (caso típico en
+      `en→ja`, el usuario elige 空き y スペース como traducciones de
+      "space"), se prepende la palabra+lectura a cada item y se omite
+      la cabecera.
+
+    Parámetros `include_pos` e `include_reading` permiten sobreescribir
+    los valores globales del config (por ejemplo para que el popup
+    decida en vivo si añadir las anotaciones gramaticales). Si se pasan
+    como `None`, se cae al valor del config.
+
+    Cuando el *src* del par es inglés y el *tgt* es japonés (`en→ja`),
+    se omite el texto de la glosa: esa glosa son las
+    `english_definitions` de Jisho (están en inglés) y repetirlas en
+    el campo equivale a copiar de vuelta el query original.
+    """
     if not choices:
         return ""
 
-    include_reading = bool(config.get("include_reading", True))
+    if include_pos is None:
+        include_pos = bool(config.get("include_parts_of_speech", True))
+    if include_reading is None:
+        include_reading = bool(config.get("include_reading", True))
 
-    first = choices[0]
-    word = first.get("word") or ""
-    reading = first.get("reading") or ""
+    pair_id = lang.normalize_pair(pair or config.get("language_pair"))
+    src, tgt = lang.pair_parts(pair_id)
+    hide_text = (src == "en" and tgt == "ja")
+
+    def _item_inner(c: dict) -> str:
+        pos = c.get("pos") or ""
+        text = c.get("text") or ""
+        source = c.get("source") or ""
+        bits: List[str] = []
+        if include_pos and pos:
+            bits.append(
+                f"<span style='color:#888;font-size:0.9em'>"
+                f"[{_esc_html(pos)}]</span>"
+            )
+        if not hide_text and text:
+            bits.append(_esc_html(text))
+        if source.startswith("local:"):
+            bits.append(
+                f"<span style='color:#888;font-size:0.85em'>"
+                f"— {_esc_html(source[len('local:'):])}</span>"
+            )
+        return " ".join(bits)
+
+    words = {(c.get("word") or "", c.get("reading") or "") for c in choices}
+    single_word = len(words) == 1
 
     parts: List[str] = []
-    head: List[str] = []
-    if word:
-        head.append(f"<b>{_esc_html(word)}</b>")
-    if include_reading and reading and reading != word:
-        head.append(f"【{_esc_html(reading)}】")
-    if head:
-        parts.append("".join(head))
 
-    items = "".join(c.get("html") or "" for c in choices)
-    if items:
-        parts.append("<ol style='margin:4px 0 0 18px;padding:0'>" + items + "</ol>")
+    if single_word:
+        w, r = next(iter(words))
+        head: List[str] = []
+        if w:
+            head.append(f"<b>{_esc_html(w)}</b>")
+        if include_reading and r and r != w:
+            head.append(f"【{_esc_html(r)}】")
+        if head:
+            parts.append("".join(head))
+
+        items_html: List[str] = []
+        for c in choices:
+            inner = _item_inner(c)
+            if inner:
+                items_html.append(f"<li>{inner}</li>")
+        if items_html:
+            parts.append(
+                "<ol style='margin:4px 0 0 18px;padding:0'>"
+                + "".join(items_html)
+                + "</ol>"
+            )
+    else:
+        items_html: List[str] = []
+        for c in choices:
+            w = c.get("word") or ""
+            r = c.get("reading") or ""
+            inner = _item_inner(c)
+            prefix_bits: List[str] = []
+            if w:
+                prefix_bits.append(f"<b>{_esc_html(w)}</b>")
+            if include_reading and r and r != w:
+                prefix_bits.append(f"【{_esc_html(r)}】")
+            prefix = "".join(prefix_bits)
+            if prefix and inner:
+                full = prefix + " " + inner
+            else:
+                full = prefix or inner
+            if full:
+                items_html.append(f"<li>{full}</li>")
+        if items_html:
+            parts.append(
+                "<ol style='margin:4px 0 0 18px;padding:0'>"
+                + "".join(items_html)
+                + "</ol>"
+            )
 
     return "<div>" + "".join(parts) + "</div>"
 

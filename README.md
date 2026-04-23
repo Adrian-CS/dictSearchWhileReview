@@ -1,108 +1,120 @@
-# Jisho Lookup — Add-on para Anki
+# Jisho Lookup — Anki add-on
 
-Selecciona una palabra durante la revisión de una tarjeta, pulsa un atajo y
-el add-on busca su definición y la inserta automáticamente en un campo
-configurable. Soporta **cuatro pares de idioma** (ja↔en, es↔en) con
-[Jisho](https://jisho.org/) para japonés y [Wiktionary](https://wiktionary.org/)
-para español, con *fallback* a **diccionarios locales Yomichan / Yomitan**
-que tú mismo proporciones.
+**Language:** [English](./README.md) · [Español](./README.es.md) · [日本語](./README.ja.md)
 
-Compatible con **Anki 2.1.60+** (Qt6).
+Select a word while reviewing a card, press a shortcut, and the add-on
+fetches its definition and writes it into a configurable field. Supports
+**four language pairs** (ja↔en, es↔en) with
+[Jisho](https://jisho.org/) for Japanese and
+[Wiktionary](https://wiktionary.org/) for Spanish, with *fallback* to
+**local Yomichan / Yomitan dictionaries** you provide yourself.
 
-## Características
+The add-on's UI is available in **English, Spanish and Japanese**; it
+picks the language automatically based on Anki's own UI language.
 
-- **Dos atajos configurables** sobre la palabra seleccionada en el reviewer:
-  - `Ctrl+S` (por defecto) — inserción rápida: mete todas las acepciones.
-  - `Ctrl+Shift+S` (por defecto) — **popup de selección**: elige campo,
-    modo (sustituir / añadir), idioma y qué acepciones insertar.
-- **Pares de idioma**: `ja→en`, `en→ja`, `es→en`, `en→es`. Se elige uno por
-  defecto en la configuración y puede cambiarse por-uso en el popup.
-- **Auto-detección** de idioma en el atajo rápido: si el par por defecto
-  no devuelve nada, re-intenta con el par auto-detectado (CJK → ja,
-  marcas españolas → es, Latin → en).
-- Tres estrategias: `Online → Local`, `Solo online`, `Solo local`.
-- **Mapeo de campos por tipo de nota**: define qué campo usar en cada
-  notetype y una lista ordenada de nombres alternativos (`Significado`,
-  `Meaning`, `Definición`…). Se usa el primero que exista en la tarjeta.
-  Desde el popup puedes elegir cualquier otro campo por-uso.
-- **Soporte offline** cargando ZIPs Yomichan/Yomitan (JMdict, Jitendex,
-  Daijirin, Shinmeikai, etc.). Se indexan al arrancar Anki.
-- Modos *sustituir* / *append* configurables globalmente y por-uso en el popup.
-- Asíncrono: las peticiones HTTP no congelan la UI.
-- Acciones de menú **Buscar selección ahora** (`Ctrl+Shift+J`) y
-  **Elegir definición (popup)…** (`Ctrl+Shift+K`) como alternativas manuales.
+Compatible with **Anki 2.1.60+** (Qt6).
 
-## Instalación
+## Features
 
-### Opción A — Desde release (.ankiaddon)
+- **Two configurable shortcuts** over the word selected in the reviewer:
+  - `Ctrl+S` (default) — quick insert: all senses at once.
+  - `Ctrl+Shift+S` (default) — **picker popup**: choose field, mode
+    (replace / append), language, whether to show grammar tags, and
+    which sense(s) to insert.
+- **Language pairs**: `ja→en`, `en→ja`, `es→en`, `en→es`. Pick a
+  default in the configuration, override per-use from the popup.
+- **Auto-detection** for the quick shortcut: if the default pair
+  returns nothing, the add-on retries with the pair auto-detected
+  from the selected text (CJK → ja, Spanish markers → es, Latin → en).
+- Three strategies: `Online → Local`, `Online only`, `Local only`.
+- **Field mapping per note type**: define which field to use per
+  note type and an ordered fallback list of alternative names
+  (`Significado`, `Meaning`, `Back`…). The first one that exists on
+  the current card is used; you can also override the target field
+  per-use from the popup.
+- **Offline support** via Yomichan/Yomitan ZIPs (JMdict, Jitendex,
+  Daijirin, Shinmeikai, etc.). They are indexed on Anki startup.
+- *Replace* / *Append* modes, configurable globally and per-use.
+- Asynchronous: HTTP requests don't freeze the UI.
+- Menu actions **Search selection now** (`Ctrl+Shift+J`) and
+  **Pick definition (popup)…** (`Ctrl+Shift+K`) as manual fallbacks.
+- **Fully localized UI** — menus, dialogs and tooltips follow Anki's
+  UI language (English / Spanish / Japanese; other locales fall back
+  to English).
 
-1. Descarga el último `.ankiaddon` de la [página de releases](../../releases).
-2. En Anki: `Herramientas → Add-ons → Instalar desde archivo…` y selecciona
-   el `.ankiaddon`.
-3. Reinicia Anki.
+## Installation
 
-### Opción B — Desde código
+### Option A — From release (.ankiaddon)
+
+1. Download the latest `.ankiaddon` from the [releases page](../../releases).
+2. In Anki: `Tools → Add-ons → Install from file…` and pick the
+   `.ankiaddon`.
+3. Restart Anki.
+
+### Option B — From source
 
 ```bash
-git clone <URL-DEL-REPO> anki-jisho-lookup
+git clone <REPO-URL> anki-jisho-lookup
 cd anki-jisho-lookup
 python3 build.py
-# Genera dist/jisho_lookup-<version>.ankiaddon
+# Produces dist/jisho_lookup-<version>.ankiaddon
 ```
 
-Luego instálalo desde Anki como en la opción A.
+Then install it in Anki as in option A.
 
-### Opción C — Enlace simbólico para desarrollo
+### Option C — Symlink for development
 
-Copia o enlaza `src/jisho_lookup/` dentro de la carpeta `addons21` de Anki:
+Copy or symlink `src/jisho_lookup/` into Anki's `addons21` folder:
 
-| Sistema  | Ruta                                                  |
-|----------|-------------------------------------------------------|
-| Windows  | `%APPDATA%\Anki2\addons21\jisho_lookup`               |
+| OS       | Path                                                        |
+|----------|-------------------------------------------------------------|
+| Windows  | `%APPDATA%\Anki2\addons21\jisho_lookup`                     |
 | macOS    | `~/Library/Application Support/Anki2/addons21/jisho_lookup` |
-| Linux    | `~/.local/share/Anki2/addons21/jisho_lookup`          |
+| Linux    | `~/.local/share/Anki2/addons21/jisho_lookup`                |
 
-## Uso
+## Usage
 
-1. Abre cualquier mazo y empieza a revisar.
-2. Arrastra con el ratón sobre una palabra japonesa para seleccionarla.
-3. Pulsa uno de los dos atajos:
-   - **`Ctrl+S`** — inserción directa de todas las acepciones.
-   - **`Ctrl+Shift+S`** — abre un popup con la lista y eliges cuál(es)
-     insertar (Ctrl/Shift+clic para multi-selección, Enter para aceptar).
-4. Verás un aviso "Buscando…" y, al terminar, un globo confirmando el campo
-   rellenado y la fuente (`Jisho` / `diccionario local` / `mezcla`).
+1. Open any deck and start reviewing.
+2. Drag with the mouse over a word to select it.
+3. Press one of the two shortcuts:
+   - **`Ctrl+S`** — insert every sense directly.
+   - **`Ctrl+Shift+S`** — opens the popup: pick which sense(s) to
+     insert (Ctrl/Shift+click for multi-select, Enter to accept).
+4. You'll see a "Searching…" tooltip and, once done, a confirmation
+   with the field that got filled and the source (`Jisho` /
+   `Wiktionary` / `local dictionary` / `mixed`).
 
-Si nada ocurre, usa `Ctrl+Shift+J` / `Ctrl+Shift+K` (menú **Herramientas →
-Jisho Lookup**) como alternativa manual y para descartar problemas de atajo.
+If nothing happens, use `Ctrl+Shift+J` / `Ctrl+Shift+K` (menu
+**Tools → Jisho Lookup**) as a manual fallback to rule out
+shortcut-capture issues.
 
-## Configuración
+## Configuration
 
-`Herramientas → Jisho Lookup → Configuración…`
+`Tools → Jisho Lookup → Configuration…`
 
-- **Atajo**: cualquier combinación tipo `Ctrl+S`, `Ctrl+Shift+J`, `Alt+D`.
-- **Estrategia**:
-  - `jisho_then_local` (recomendada) — prueba online, fallback local.
-  - `local_only` — todo offline.
-  - `jisho_only` — solo online, sin fallback.
-- **Par de idioma (por defecto)**: `ja_en`, `en_ja`, `es_en`, `en_es`. Se
-  elige en la configuración y determina qué fuente online se usa
-  (Jisho para pares japoneses, Wiktionary para pares españoles).
-- **Auto-detectar idioma si el par por defecto no da resultados**: si
-  está activo, el atajo rápido re-intenta con el par auto-detectado
-  cuando el par por defecto no encuentra nada.
-- **Mapeo de campos por tipo de nota**: tabla con filas
-  `notetype → lista de nombres de campo`. La fila especial `_default` se
-  usa cuando el notetype actual no tiene regla propia.
-- **Diccionarios locales**: lista con checkboxes de los ZIPs encontrados
-  en `src/jisho_lookup/dictionaries/` (o en la carpeta equivalente del
-  add-on instalado). Si ninguno está marcado se interpreta como "todos".
-- **Sobrescribir** / **Añadir al final**: comportamiento cuando el campo
-  destino ya tiene contenido.
-- **Incluir lectura** / **Incluir categorías gramaticales**: formato del
-  resultado insertado.
+- **Shortcut**: any combo like `Ctrl+S`, `Ctrl+Shift+J`, `Alt+D`.
+- **Strategy**:
+  - `jisho_then_local` (recommended) — try online, fall back to local.
+  - `local_only` — fully offline.
+  - `jisho_only` — online only, no fallback.
+- **Default language pair**: `ja_en`, `en_ja`, `es_en`, `en_es`. Picked
+  in the configuration and determines which online source is used
+  (Jisho for Japanese pairs, Wiktionary for Spanish pairs).
+- **Auto-detect language if the default pair returns nothing**: when
+  enabled, the quick shortcut retries with the auto-detected pair
+  whenever the default pair comes up empty.
+- **Field mapping per note type**: a table of rows
+  `notetype → list of field names`. The special `_default` row is
+  used when the current notetype has no rule of its own.
+- **Local dictionaries**: a checklist of ZIPs found in
+  `src/jisho_lookup/dictionaries/` (or the equivalent folder of the
+  installed add-on). If none are checked, all are considered active.
+- **Overwrite** / **Append**: behaviour when the target field already
+  has content.
+- **Include reading** / **Include grammar tags**: formatting of the
+  inserted result.
 
-Ejemplo de `note_type_field_map`:
+Example `note_type_field_map`:
 
 ```json
 {
@@ -113,10 +125,10 @@ Ejemplo de `note_type_field_map`:
 }
 ```
 
-## Diccionarios locales (Yomichan / Yomitan)
+## Local dictionaries (Yomichan / Yomitan)
 
-Coloca tus ZIPs dentro de `src/jisho_lookup/dictionaries/` (o
-`.../addons21/jisho_lookup/dictionaries/` una vez instalado):
+Drop your ZIPs into `src/jisho_lookup/dictionaries/` (or
+`.../addons21/jisho_lookup/dictionaries/` once installed):
 
 ```
 dictionaries/
@@ -125,80 +137,82 @@ dictionaries/
     daijirin.zip
 ```
 
-Puedes obtenerlos desde la comunidad de Yomitan. El add-on indexa al
-arrancar Anki, soporta tanto el formato clásico (`glossary` como lista
-de strings) como el moderno `structured-content`, y consulta todos los
-activos simultáneamente.
+You can find them through the Yomitan community. The add-on indexes
+them on Anki startup, supports both the classic format (`glossary`
+as a list of strings) and the modern `structured-content`, and
+queries every active dictionary simultaneously.
 
-## Desarrollo
+## Interface language
 
-### Estructura del repo
+The UI auto-detects Anki's own language setting
+(`Tools → Preferences → Interface language`):
+
+- English locales → English UI
+- `es`, `es_ES`, `es_MX`, etc. → Spanish UI
+- `ja`, `ja_JP` → Japanese UI
+- Any other locale → English UI (safe default)
+
+The brand name "Jisho Lookup" is kept across all three languages.
+
+## Development
+
+### Repo layout
 
 ```
 ├── src/
-│   └── jisho_lookup/        # código fuente del add-on
+│   └── jisho_lookup/        # add-on source
 │       ├── __init__.py
 │       ├── manifest.json
 │       ├── config.json
 │       ├── config.md
-│       ├── reviewer.py      # hook del reviewer + keydown JS
-│       ├── lookup.py        # orquestador búsqueda → campo
-│       ├── lang.py          # pares de idioma + auto-detección
-│       ├── jisho_client.py  # cliente HTTP a Jisho (ja↔en)
-│       ├── wiktionary_client.py  # cliente HTTP a Wiktionary (es↔en)
-│       ├── yomitan_reader.py# parser de ZIPs Yomichan/Yomitan
-│       ├── picker_dialog.py # popup Qt de selección
-│       ├── config_dialog.py # diálogo Qt de configuración
-│       └── dictionaries/    # ZIPs de usuario (gitignored)
-├── build.py                 # empaqueta src/ → dist/*.ankiaddon
+│       ├── i18n.py          # UI translations (en / es / ja)
+│       ├── reviewer.py      # reviewer hook + keydown JS
+│       ├── lookup.py        # search → field orchestration
+│       ├── lang.py          # language pairs + auto-detect
+│       ├── jisho_client.py  # HTTP client for Jisho (ja↔en)
+│       ├── wiktionary_client.py  # HTTP client for Wiktionary (es↔en, en→ja)
+│       ├── yomitan_reader.py# Yomichan/Yomitan ZIP parser
+│       ├── picker_dialog.py # Qt picker popup
+│       ├── config_dialog.py # Qt config dialog
+│       └── dictionaries/    # user ZIPs (gitignored)
+├── build.py                 # bundles src/ → dist/*.ankiaddon
 ├── .github/workflows/
-│   └── release.yml          # CI: adjunta .ankiaddon a cada release tag
-├── README.md
+│   └── release.yml          # CI: attach .ankiaddon to each release tag
+├── README.md                # English (primary)
+├── README.es.md             # Spanish
+├── README.ja.md             # Japanese
 ├── CHANGELOG.md
 └── LICENSE
 ```
 
-### Construir el paquete
+### Building the package
 
 ```bash
 python3 build.py
-# dist/jisho_lookup-1.0.1.ankiaddon
+# dist/jisho_lookup-<version>.ankiaddon
 ```
 
-### Publicar en GitHub por primera vez
-
-Desde la raíz del proyecto:
+### Publishing a release
 
 ```bash
-git init -b main
-git add -A
-git commit -m "Initial commit: Jisho Lookup v1.0.1"
-
-# Sustituye por la URL de tu repo vacío creado en GitHub
-git remote add origin https://github.com/<usuario>/<repo>.git
-git push -u origin main
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
-### Publicar una release
+The `.github/workflows/release.yml` workflow builds the `.ankiaddon`
+and attaches it to the GitHub release automatically.
 
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
+## Known limitations
 
-El workflow `.github/workflows/release.yml` construye el `.ankiaddon` y lo
-adjunta automáticamente al release de GitHub.
+- Jisho's API is public but unofficial: it may rate-limit or change.
+  That's why local fallback exists.
+- The shortcut is captured via JavaScript inside the WebView (needed
+  because `QWebEngineView` eats keyboard events before `QShortcut`
+  gets them), so it only works during review — not in the editor nor
+  in the browser.
+- Yomichan/Yomitan dictionaries are loaded into memory on first use;
+  with many large dictionaries the first lookup can take 1–3 s.
 
-## Limitaciones conocidas
+## License
 
-- La API de Jisho es pública pero no oficial: puede rate-limitar o cambiar.
-  Por eso existe el fallback local.
-- El atajo se captura vía JavaScript dentro del WebView (necesario porque
-  `QWebEngineView` absorbe los eventos de teclado antes que `QShortcut`),
-  así que sólo funciona durante la revisión, no en el editor ni en el browser.
-- Los diccionarios Yomichan/Yomitan se cargan en memoria al primer uso;
-  con muchos diccionarios grandes puede costar 1-3 s la primera búsqueda.
-
-## Licencia
-
-MIT — ver [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE).

@@ -32,6 +32,7 @@ from aqt.operations import QueryOp
 from . import lang
 from . import lookup
 from . import picker_dialog
+from .i18n import tr
 
 
 PYCMD_RUN = "jisho_lookup__run:"
@@ -145,7 +146,7 @@ def _on_js_message(handled: Tuple[bool, object], message: str, context):
     if message.startswith(PYCMD_RUN):
         selected = message[len(PYCMD_RUN):].strip()
         if not selected:
-            tooltip("Jisho Lookup: selecciona primero una palabra con el ratón.", period=2500)
+            tooltip(tr("reviewer.select_first"), period=2500)
             return (True, None)
         _run_lookup_async(selected)
         return (True, None)
@@ -153,7 +154,7 @@ def _on_js_message(handled: Tuple[bool, object], message: str, context):
     if message.startswith(PYCMD_PICK):
         selected = message[len(PYCMD_PICK):].strip()
         if not selected:
-            tooltip("Jisho Lookup: selecciona primero una palabra con el ratón.", period=2500)
+            tooltip(tr("reviewer.select_first"), period=2500)
             return (True, None)
         _run_picker_async(selected)
         return (True, None)
@@ -176,17 +177,14 @@ def _run_lookup_async(selected: str) -> None:
         query, html, source, used_pair = result
         if not html:
             if config.get("show_tooltip_on_error", True):
-                tooltip(
-                    f"Jisho Lookup: nada encontrado para <b>{query}</b>.",
-                    period=3000,
-                )
+                tooltip(tr("reviewer.not_found", query=query), period=3000)
             return
         _write_to_current_card(
             query, html, source, config, used_pair=used_pair
         )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
-    op.with_progress(label="Buscando definición…").run_in_background()
+    op.with_progress(label=tr("reviewer.searching")).run_in_background()
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +193,16 @@ def _run_lookup_async(selected: str) -> None:
 
 def _run_picker_async(selected: str) -> None:
     config = _current_config()
-    initial_pair = lang.normalize_pair(config.get("language_pair"))
+    global_pair = lang.normalize_pair(config.get("language_pair"))
+
+    # Si el usuario tiene activado el auto-fallback, aplicamos la detección
+    # también al abrir el popup: da igual qué par global tengas, si el
+    # texto es claramente de otro idioma abrimos ya apuntando al par que
+    # sí tiene sentido. El combo sigue disponible para cambiar a mano.
+    if bool(config.get("language_pair_auto_fallback", True)):
+        initial_pair = lang.auto_detect_pair(selected, global_pair=global_pair)
+    else:
+        initial_pair = global_pair
 
     def worker(_col) -> Tuple[str, List[dict], str]:
         choices, header = lookup.collect_choices(selected, config, pair=initial_pair)
@@ -233,8 +240,7 @@ def _run_picker_async(selected: str) -> None:
             # Aun así abrimos el diálogo para permitir cambiar de idioma.
             if config.get("show_tooltip_on_error", True):
                 tooltip(
-                    f"Jisho Lookup: nada encontrado para <b>{query}</b>. "
-                    "Prueba a cambiar de idioma en el popup.",
+                    tr("reviewer.not_found_picker", query=query),
                     period=2500,
                 )
 
@@ -246,6 +252,9 @@ def _run_picker_async(selected: str) -> None:
             initial_field=initial_field,
             initial_mode=initial_mode,
             initial_pair=initial_pair,
+            initial_include_pos=bool(
+                config.get("include_parts_of_speech", True)
+            ),
             reload_fn=reload_fn,
             parent=mw,
         )
@@ -256,8 +265,14 @@ def _run_picker_async(selected: str) -> None:
         chosen_field = bundle["field"]
         chosen_mode = bundle["mode"]
         chosen_pair = bundle["pair"]
+        chosen_include_pos = bool(bundle.get("include_pos", True))
 
-        html = lookup.format_picked_choices(picked, config)
+        html = lookup.format_picked_choices(
+            picked,
+            config,
+            pair=chosen_pair,
+            include_pos=chosen_include_pos,
+        )
         if not html:
             return
 
@@ -265,7 +280,7 @@ def _run_picker_async(selected: str) -> None:
         if len(sources) == 1:
             src = next(iter(sources))
         else:
-            src = "varios"
+            src = "mixed"
 
         _write_to_current_card(
             query,
@@ -278,7 +293,7 @@ def _run_picker_async(selected: str) -> None:
         )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
-    op.with_progress(label="Buscando acepciones…").run_in_background()
+    op.with_progress(label=tr("reviewer.searching_picker")).run_in_background()
 
 
 # ---------------------------------------------------------------------------
@@ -309,12 +324,10 @@ def _write_to_current_card(
 
     if field is None:
         model = note.note_type() or {}
-        model_name = model.get("name", "(desconocido)") if isinstance(model, dict) else "(desconocido)"
+        model_name = model.get("name", "?") if isinstance(model, dict) else "?"
         available = ", ".join(note.keys())
         tooltip(
-            f"Jisho Lookup: sin campo configurado para <b>{model_name}</b>.<br>"
-            f"Campos disponibles: {available}.<br>"
-            "Abre Herramientas → Jisho Lookup → Configuración.",
+            tr("reviewer.no_field", model=model_name, fields=available),
             period=5500,
         )
         return
@@ -331,9 +344,7 @@ def _write_to_current_card(
 
     if current.strip() and not overwrite and not append:
         tooltip(
-            f"Jisho Lookup: <b>{field}</b> ya tiene contenido. "
-            "Activa 'sobrescribir' o 'añadir al final' en la configuración "
-            "(o usa el popup para elegir modo).",
+            tr("reviewer.field_has_content", field=field),
             period=4000,
         )
         return
@@ -353,22 +364,42 @@ def _write_to_current_card(
 
     if config.get("show_tooltip_on_success", True):
         origin_map = {
-            "jisho": "Jisho",
-            "wiktionary": "Wiktionary",
-            "local": "diccionario local",
-            "varios": "mezcla de fuentes",
+            "jisho": tr("source.jisho"),
+            "wiktionary": tr("source.wiktionary"),
+            "local": tr("source.local"),
+            "mixed": tr("source.mixed"),
+            "varios": tr("source.mixed"),
         }
         origin = origin_map.get(source, source or "?")
         pair_suffix = ""
         if used_pair:
             pair_suffix = f" · {lang.pair_label(used_pair)}"
         tooltip(
-            f"Jisho Lookup: <b>{query}</b> → campo <b>{field}</b> "
-            f"({origin}{pair_suffix}).",
+            tr(
+                "reviewer.success",
+                query=query,
+                field=field,
+                origin=origin,
+                pair_suffix=pair_suffix,
+            ),
             period=2500,
         )
 
-    # Refrescar la vista si ya se mostró la respuesta.
+    # Refrescar la vista.
+    #
+    # Anki cachea el HTML renderizado en `card._render_output`. Si sólo
+    # llamamos `_showQuestion` / `_showAnswer` volveremos a ver el
+    # contenido viejo. Hay que invalidar el caché y recargar la carta
+    # desde la BD para forzar un render nuevo con los campos actualizados.
+    try:
+        card._render_output = None  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    try:
+        card.load()
+    except Exception:
+        pass
+
     try:
         if reviewer.state == "answer":
             reviewer._showAnswer()
@@ -384,24 +415,24 @@ def _write_to_current_card(
 
 def _selection_or_tooltip(callback) -> None:
     if mw.state != "review":
-        tooltip("Jisho Lookup: debes estar revisando una tarjeta.", period=2500)
+        tooltip(tr("reviewer.not_reviewing"), period=2500)
         return
     reviewer = mw.reviewer
     if reviewer is None or reviewer.card is None:
-        tooltip("Jisho Lookup: no hay tarjeta activa.", period=2500)
+        tooltip(tr("reviewer.no_card"), period=2500)
         return
 
     def got(sel: str) -> None:
         sel = (sel or "").strip()
         if not sel:
-            tooltip("Jisho Lookup: selecciona una palabra con el ratón primero.", period=2500)
+            tooltip(tr("reviewer.select_first"), period=2500)
             return
         callback(sel)
 
     try:
         reviewer.web.evalWithCallback("window.getSelection().toString();", got)
     except Exception:
-        tooltip("Jisho Lookup: no se pudo leer la selección.", period=2500)
+        tooltip(tr("reviewer.no_read"), period=2500)
 
 
 def run_from_menu() -> None:

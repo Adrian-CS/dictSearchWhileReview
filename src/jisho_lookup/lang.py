@@ -7,11 +7,13 @@ from typing import Dict, List, Optional, Tuple
 
 
 # Pares soportados. Clave: "src_tgt" (códigos ISO-639-1).
+# Nota: el label visible se obtiene vía `i18n.tr("pair.<pair_id>")` para que
+# se traduzca al idioma de la UI de Anki; aquí sólo guardamos la estructura.
 PAIRS: Dict[str, dict] = {
-    "ja_en": {"label": "Japonés → Inglés",  "src": "ja", "tgt": "en"},
-    "en_ja": {"label": "Inglés → Japonés",  "src": "en", "tgt": "ja"},
-    "es_en": {"label": "Español → Inglés",  "src": "es", "tgt": "en"},
-    "en_es": {"label": "Inglés → Español",  "src": "en", "tgt": "es"},
+    "ja_en": {"src": "ja", "tgt": "en"},
+    "en_ja": {"src": "en", "tgt": "ja"},
+    "es_en": {"src": "es", "tgt": "en"},
+    "en_es": {"src": "en", "tgt": "es"},
 }
 
 DEFAULT_PAIR = "ja_en"
@@ -22,7 +24,14 @@ def all_pair_ids() -> List[str]:
 
 
 def pair_label(pair_id: str) -> str:
-    return PAIRS.get(pair_id, {}).get("label", pair_id)
+    """Etiqueta traducida del par. Cae al propio id si no hay traducción."""
+    try:
+        from . import i18n  # import local para evitar ciclos en tests
+    except Exception:
+        return pair_id
+    key = f"pair.{pair_id}"
+    label = i18n.tr(key)
+    return label if label != key else pair_id
 
 
 def pair_parts(pair_id: str) -> Tuple[str, str]:

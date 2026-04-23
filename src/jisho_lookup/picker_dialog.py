@@ -16,13 +16,20 @@ from aqt.qt import (
     QComboBox,
     QRadioButton,
     QButtonGroup,
+    QCheckBox,
     QAbstractItemView,
     Qt,
     QKeySequence,
     QShortcut,
 )
 
+try:
+    from aqt import mw as _mw  # para taskman (background threading)
+except Exception:  # pragma: no cover - fuera de Anki
+    _mw = None
+
 from . import lang
+from .i18n import tr
 
 
 # El callback de recarga recibe un pair_id y devuelve (choices, header).
@@ -30,13 +37,21 @@ ReloadFn = Callable[[str], Tuple[List[dict], str]]
 
 
 class PickerResult:
-    __slots__ = ("picked", "field", "mode", "pair")
+    __slots__ = ("picked", "field", "mode", "pair", "include_pos")
 
-    def __init__(self, picked: List[dict], field: str, mode: str, pair: str):
+    def __init__(
+        self,
+        picked: List[dict],
+        field: str,
+        mode: str,
+        pair: str,
+        include_pos: bool,
+    ):
         self.picked = picked
         self.field = field
         self.mode = mode
         self.pair = pair
+        self.include_pos = include_pos
 
     def as_dict(self) -> dict:
         return {
@@ -44,6 +59,7 @@ class PickerResult:
             "field": self.field,
             "mode": self.mode,
             "pair": self.pair,
+            "include_pos": self.include_pos,
         }
 
 
@@ -65,6 +81,7 @@ class DefinitionPicker(QDialog):
         initial_field: Optional[str] = None,
         initial_mode: str = "overwrite",  # "overwrite" | "append"
         initial_pair: str = lang.DEFAULT_PAIR,
+        initial_include_pos: bool = True,
         reload_fn: Optional[ReloadFn] = None,
         parent=None,
     ):
@@ -73,8 +90,9 @@ class DefinitionPicker(QDialog):
         self._selected_indices: List[int] = []
         self._reload_fn = reload_fn
         self._current_pair = lang.normalize_pair(initial_pair)
+        self._include_pos = bool(initial_include_pos)
 
-        self.setWindowTitle("Jisho Lookup — Elegir definición")
+        self.setWindowTitle(tr("picker.window_title"))
         self.resize(680, 520)
 
         root = QVBoxLayout(self)
@@ -89,7 +107,7 @@ class DefinitionPicker(QDialog):
         top = QHBoxLayout()
 
         # Campo destino
-        top.addWidget(QLabel("Campo:"))
+        top.addWidget(QLabel(tr("picker.field")))
         self.field_combo = QComboBox()
         cands = list(field_candidates or [])
         for f in cands:
@@ -105,8 +123,8 @@ class DefinitionPicker(QDialog):
 
         # Modo
         self.mode_group = QButtonGroup(self)
-        self.radio_overwrite = QRadioButton("Sustituir")
-        self.radio_append = QRadioButton("Añadir")
+        self.radio_overwrite = QRadioButton(tr("picker.overwrite"))
+        self.radio_append = QRadioButton(tr("picker.append"))
         self.mode_group.addButton(self.radio_overwrite)
         self.mode_group.addButton(self.radio_append)
         if initial_mode == "append":
@@ -118,8 +136,18 @@ class DefinitionPicker(QDialog):
 
         top.addStretch(1)
 
+        # Toggle POS (anotaciones gramaticales) — sobreescribe el global
+        # sólo para esta invocación del popup.
+        self.pos_check = QCheckBox(tr("picker.pos"))
+        self.pos_check.setToolTip(tr("picker.pos_tooltip"))
+        self.pos_check.setChecked(self._include_pos)
+        self.pos_check.toggled.connect(self._on_pos_toggled)
+        top.addWidget(self.pos_check)
+
+        top.addSpacing(12)
+
         # Idioma
-        top.addWidget(QLabel("Idioma:"))
+        top.addWidget(QLabel(tr("picker.language")))
         self.lang_combo = QComboBox()
         self._pair_ids: List[str] = lang.all_pair_ids()
         for pid in self._pair_ids:
@@ -156,9 +184,9 @@ class DefinitionPicker(QDialog):
         # -------------------------------------------------- botones
         row = QHBoxLayout()
         row.addStretch(1)
-        self.btn_cancel = QPushButton("Cancelar")
+        self.btn_cancel = QPushButton(tr("common.cancel"))
         self.btn_cancel.clicked.connect(self.reject)
-        self.btn_ok = QPushButton("Insertar")
+        self.btn_ok = QPushButton(tr("picker.insert"))
         self.btn_ok.setDefault(True)
         self.btn_ok.clicked.connect(self._on_accept)
         row.addWidget(self.btn_cancel)
@@ -181,25 +209,44 @@ class DefinitionPicker(QDialog):
             self._header_label.setVisible(False)
 
     def _set_hint(self, multi_select: bool) -> None:
-        msg = (
-            "Selecciona una o varias acepciones (Ctrl/Shift+clic). "
-            "Enter para insertar, Esc para cancelar."
-            if multi_select
-            else "Selecciona una acepción. Enter para insertar, Esc para cancelar."
-        )
+        msg = tr("picker.hint_multi") if multi_select else tr("picker.hint_single")
         self._hint.setText(f"<small style='color:#888'>{_esc(msg)}</small>")
 
     def _populate_list(self, choices: List[dict]) -> None:
         self.list_widget.clear()
         self._choices = list(choices)
         for idx, c in enumerate(self._choices):
-            label = _format_row(c)
+            label = _format_row(c, include_pos=self._include_pos)
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, idx)
             item.setToolTip(c.get("text") or "")
             self.list_widget.addItem(item)
         if self.list_widget.count() > 0:
             self.list_widget.setCurrentRow(0)
+
+    # ------------------------------------------------------------------
+    def _on_pos_toggled(self, checked: bool) -> None:
+        """Re-renderiza las filas sin volver a pedir datos.
+
+        Memoriza también la selección actual (por índice) para restaurarla
+        tras el repintado, así al alternar el checkbox no se pierde lo
+        que el usuario ya había marcado.
+        """
+        self._include_pos = bool(checked)
+        selected = sorted(
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self.list_widget.selectedItems()
+        )
+        current = self.list_widget.currentRow()
+        self._populate_list(self._choices)
+        # Restaurar selección
+        for i in range(self.list_widget.count()):
+            it = self.list_widget.item(i)
+            idx = it.data(Qt.ItemDataRole.UserRole)
+            if idx in selected:
+                it.setSelected(True)
+        if 0 <= current < self.list_widget.count():
+            self.list_widget.setCurrentRow(current)
 
     # ------------------------------------------------------------------
     def _on_pair_changed(self, idx: int) -> None:
@@ -211,12 +258,51 @@ class DefinitionPicker(QDialog):
         self._current_pair = new_pair
         if self._reload_fn is None:
             return
-        try:
-            choices, header = self._reload_fn(new_pair)
-        except Exception:
-            choices, header = [], ""
-        self._set_header(header)
-        self._populate_list(choices or [])
+
+        # Placeholder mientras cargamos (la petición HTTP puede tardar).
+        self._set_header(tr("picker.loading_pair", pair=lang.pair_label(new_pair)))
+        self.list_widget.clear()
+        busy = QListWidgetItem(tr("picker.loading"))
+        busy.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.list_widget.addItem(busy)
+
+        fn = self._reload_fn
+
+        def task():
+            try:
+                return fn(new_pair)
+            except Exception:
+                return [], ""
+
+        def on_done(fut) -> None:
+            # Si el usuario cambió otra vez de idioma mientras esperábamos,
+            # descartamos este resultado.
+            if self._current_pair != new_pair:
+                return
+            try:
+                choices, header = fut.result()
+            except Exception:
+                choices, header = [], ""
+            self._set_header(header or "")
+            if choices:
+                self._populate_list(choices)
+            else:
+                self.list_widget.clear()
+                empty = QListWidgetItem(tr("picker.no_results"))
+                empty.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.list_widget.addItem(empty)
+                self._choices = []
+
+        if _mw is not None and hasattr(_mw, "taskman"):
+            _mw.taskman.run_in_background(task, on_done)
+        else:
+            # Fallback síncrono (fuera de Anki, tests, etc.)
+            try:
+                choices, header = task()
+            except Exception:
+                choices, header = [], ""
+            self._set_header(header or "")
+            self._populate_list(choices or [])
 
     # ------------------------------------------------------------------
     def _on_accept(self, *_):
@@ -243,21 +329,45 @@ class DefinitionPicker(QDialog):
         field = self.field_combo.currentText() if self.field_combo.count() else ""
         mode = "append" if self.radio_append.isChecked() else "overwrite"
         return PickerResult(
-            picked=picked, field=field, mode=mode, pair=self._current_pair
+            picked=picked,
+            field=field,
+            mode=mode,
+            pair=self._current_pair,
+            include_pos=self._include_pos,
         )
 
 
 # ----------------------------------------------------------------------
-def _format_row(choice: dict) -> str:
-    """Formato visible de cada fila."""
+def _format_row(choice: dict, *, include_pos: bool = True) -> str:
+    """Formato visible de cada fila.
+
+    Prefijo con la palabra + lectura cuando existen, para que en pares
+    como `en→ja` cada fila se lea como "空き【あき】 [n] space, room…",
+    y no como "[n] space, room, gap" (que parece circular cuando se
+    buscó precisamente la palabra 'space').
+
+    `include_pos` controla si se muestra la etiqueta `[Noun]`, `[Verb]`,
+    etc. Se suele pasar desde el estado del checkbox del diálogo.
+    """
     pos = choice.get("pos") or ""
     text = choice.get("text") or ""
     source = choice.get("source") or ""
+    word = choice.get("word") or ""
+    reading = choice.get("reading") or ""
+
+    head = ""
+    if word:
+        head = word
+        if reading and reading != word:
+            head += f" 【{reading}】"
+        head += "   "
+
     bits = []
-    if pos:
+    if include_pos and pos:
         bits.append(f"[{pos}]")
-    bits.append(text)
-    row = " ".join(bits)
+    if text:
+        bits.append(text)
+    row = head + " ".join(bits)
     if source:
         row = f"{row}   ({source})"
     return row
@@ -280,11 +390,13 @@ def show_picker(
     initial_field: Optional[str] = None,
     initial_mode: str = "overwrite",
     initial_pair: str = lang.DEFAULT_PAIR,
+    initial_include_pos: bool = True,
     reload_fn: Optional[ReloadFn] = None,
     parent=None,
 ) -> Optional[dict]:
     """Abre el diálogo. Devuelve un dict con
-    ``{picked, field, mode, pair}`` o ``None`` si el usuario cancela.
+    ``{picked, field, mode, pair, include_pos}`` o ``None`` si el
+    usuario cancela.
 
     El diálogo permite cancelar sin elegir, pero también permite cambiar
     de idioma (vía `reload_fn`) aunque la búsqueda inicial no diera
@@ -300,6 +412,7 @@ def show_picker(
         initial_field=initial_field,
         initial_mode=initial_mode,
         initial_pair=initial_pair,
+        initial_include_pos=initial_include_pos,
         reload_fn=reload_fn,
         parent=parent,
     )

@@ -25,6 +25,7 @@ from aqt.qt import (
 
 from . import lookup
 from . import lang
+from .i18n import tr
 
 
 DEFAULT_KEY = "_default"
@@ -33,7 +34,7 @@ DEFAULT_KEY = "_default"
 class ConfigDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Jisho Lookup — Configuración")
+        self.setWindowTitle(tr("config.window_title"))
         self.resize(720, 540)
 
         self.config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
@@ -46,41 +47,38 @@ class ConfigDialog(QDialog):
 
         # Atajos (RUN + PICK)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Atajo rápido:"))
+        row.addWidget(QLabel(tr("config.shortcut")))
         self.shortcut_edit = QLineEdit()
         self.shortcut_edit.setPlaceholderText("Ctrl+S")
         self.shortcut_edit.setMaximumWidth(140)
         row.addWidget(self.shortcut_edit)
 
         row.addSpacing(12)
-        row.addWidget(QLabel("Atajo picker:"))
+        row.addWidget(QLabel(tr("config.picker_shortcut")))
         self.picker_shortcut_edit = QLineEdit()
         self.picker_shortcut_edit.setPlaceholderText("Ctrl+Shift+S")
         self.picker_shortcut_edit.setMaximumWidth(160)
         row.addWidget(self.picker_shortcut_edit)
 
         row.addSpacing(12)
-        row.addWidget(QLabel("Estrategia:"))
+        row.addWidget(QLabel(tr("config.strategy")))
         self.strategy_combo = QComboBox()
-        self.strategy_combo.addItem("Online → Local (fallback)", "jisho_then_local")
-        self.strategy_combo.addItem("Solo local", "local_only")
-        self.strategy_combo.addItem("Solo online", "jisho_only")
+        self.strategy_combo.addItem(tr("config.strategy.online_then_local"), "jisho_then_local")
+        self.strategy_combo.addItem(tr("config.strategy.local_only"), "local_only")
+        self.strategy_combo.addItem(tr("config.strategy.online_only"), "jisho_only")
         row.addWidget(self.strategy_combo)
         row.addStretch(1)
         layout.addLayout(row)
 
         # Idioma por defecto + auto-fallback
         lang_row = QHBoxLayout()
-        lang_row.addWidget(QLabel("Par de idioma (por defecto):"))
+        lang_row.addWidget(QLabel(tr("config.language_pair")))
         self.lang_combo = QComboBox()
         for pid in lang.all_pair_ids():
             self.lang_combo.addItem(lang.pair_label(pid), pid)
         lang_row.addWidget(self.lang_combo)
 
-        self.auto_fallback_cb = QCheckBox(
-            "Auto-detectar idioma si el par por defecto no da resultados "
-            "(sólo en el atajo rápido)"
-        )
+        self.auto_fallback_cb = QCheckBox(tr("config.auto_fallback"))
         lang_row.addSpacing(12)
         lang_row.addWidget(self.auto_fallback_cb)
         lang_row.addStretch(1)
@@ -88,11 +86,11 @@ class ConfigDialog(QDialog):
 
         # Opciones booleanas
         opts = QHBoxLayout()
-        self.include_reading_cb = QCheckBox("Incluir lectura")
-        self.include_pos_cb = QCheckBox("Incluir categorías gramaticales")
-        self.overwrite_cb = QCheckBox("Sobrescribir campo existente")
-        self.append_cb = QCheckBox("Añadir al final (no reemplazar)")
-        self.picker_multi_cb = QCheckBox("Picker: multi-selección")
+        self.include_reading_cb = QCheckBox(tr("config.include_reading"))
+        self.include_pos_cb = QCheckBox(tr("config.include_pos"))
+        self.overwrite_cb = QCheckBox(tr("config.overwrite"))
+        self.append_cb = QCheckBox(tr("config.append"))
+        self.picker_multi_cb = QCheckBox(tr("config.multi_select"))
         for cb in (self.include_reading_cb, self.include_pos_cb, self.overwrite_cb,
                    self.append_cb, self.picker_multi_cb):
             opts.addWidget(cb)
@@ -101,21 +99,20 @@ class ConfigDialog(QDialog):
 
         # Tabla de mapeo notetype -> campos
         layout.addWidget(QLabel(
-            "<b>Mapeo de campos por tipo de nota</b><br>"
-            "<small>Escribe nombres de campo separados por comas. "
-            "Se usará el primero que exista en la tarjeta. "
-            f"La fila <i>{DEFAULT_KEY}</i> es el fallback.</small>"
+            tr("config.fieldmap_title", default_key=DEFAULT_KEY)
         ))
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Tipo de nota", "Campos (coma-separados)"])
+        self.table.setHorizontalHeaderLabels([
+            tr("config.col.notetype"), tr("config.col.fields")
+        ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table, 1)
 
         btn_row = QHBoxLayout()
-        self.add_btn = QPushButton("Añadir tipo de nota…")
+        self.add_btn = QPushButton(tr("config.btn.add_row"))
         self.add_btn.clicked.connect(self._on_add_row)
-        self.del_btn = QPushButton("Eliminar fila")
+        self.del_btn = QPushButton(tr("config.btn.del_row"))
         self.del_btn.clicked.connect(self._on_del_row)
         btn_row.addWidget(self.add_btn)
         btn_row.addWidget(self.del_btn)
@@ -124,17 +121,18 @@ class ConfigDialog(QDialog):
 
         # Diccionarios locales
         layout.addWidget(QLabel(
-            "<b>Diccionarios locales (ZIP Yomichan/Yomitan)</b><br>"
-            f"<small>Carpeta: <code>{lookup.DICTS_DIR}</code></small>"
+            tr("config.dicts_title", folder=lookup.DICTS_DIR)
         ))
         self.dict_table = QTableWidget(0, 2)
-        self.dict_table.setHorizontalHeaderLabels(["Activo", "Diccionario"])
+        self.dict_table.setHorizontalHeaderLabels([
+            tr("config.col.active"), tr("config.col.dict")
+        ])
         self.dict_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.dict_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.dict_table, 1)
 
         dict_row = QHBoxLayout()
-        self.reload_btn = QPushButton("Recargar lista")
+        self.reload_btn = QPushButton(tr("config.btn.reload"))
         self.reload_btn.clicked.connect(self._reload_dicts)
         dict_row.addWidget(self.reload_btn)
         dict_row.addStretch(1)
@@ -143,10 +141,10 @@ class ConfigDialog(QDialog):
         # OK / Cancelar
         bottom = QHBoxLayout()
         bottom.addStretch(1)
-        self.ok_btn = QPushButton("Guardar")
+        self.ok_btn = QPushButton(tr("common.save"))
         self.ok_btn.setDefault(True)
         self.ok_btn.clicked.connect(self._on_save)
-        self.cancel_btn = QPushButton("Cancelar")
+        self.cancel_btn = QPushButton(tr("common.cancel"))
         self.cancel_btn.clicked.connect(self.reject)
         bottom.addWidget(self.cancel_btn)
         bottom.addWidget(self.ok_btn)
@@ -202,9 +200,7 @@ class ConfigDialog(QDialog):
         if not names:
             r = self.dict_table.rowCount()
             self.dict_table.insertRow(r)
-            self.dict_table.setItem(r, 1, QTableWidgetItem(
-                "(ningún ZIP detectado — copia archivos en la carpeta 'dictionaries/')"
-            ))
+            self.dict_table.setItem(r, 1, QTableWidgetItem(tr("config.no_dicts")))
 
     # --------------------------------------------------------------- rows
     def _append_row(self, notetype: str, fields: str) -> None:
@@ -221,18 +217,18 @@ class ConfigDialog(QDialog):
             pass
         # diálogo sencillo con combo
         picker = QDialog(self)
-        picker.setWindowTitle("Elegir tipo de nota")
+        picker.setWindowTitle(tr("config.add_notetype_title"))
         v = QVBoxLayout(picker)
-        v.addWidget(QLabel("Tipo de nota:"))
+        v.addWidget(QLabel(tr("config.notetype_label")))
         combo = QComboBox()
         combo.setEditable(True)
         combo.addItems(models)
         v.addWidget(combo)
         row = QHBoxLayout()
         row.addStretch(1)
-        ok = QPushButton("OK")
+        ok = QPushButton(tr("common.ok"))
         ok.clicked.connect(picker.accept)
-        cancel = QPushButton("Cancelar")
+        cancel = QPushButton(tr("common.cancel"))
         cancel.clicked.connect(picker.reject)
         row.addWidget(cancel)
         row.addWidget(ok)
@@ -249,7 +245,11 @@ class ConfigDialog(QDialog):
         for r in rows:
             key = self.table.item(r, 0).text() if self.table.item(r, 0) else ""
             if key == DEFAULT_KEY:
-                QMessageBox.information(self, "Jisho Lookup", "No puedes eliminar la fila _default.")
+                QMessageBox.information(
+                    self,
+                    tr("common.addon_name"),
+                    tr("config.cannot_delete_default"),
+                )
                 continue
             self.table.removeRow(r)
 
