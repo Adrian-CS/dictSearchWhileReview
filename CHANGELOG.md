@@ -3,6 +3,40 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.4.3] - 2026-04-24
+
+### Arreglado
+- **Atajo rápido con global `es→ja` sobre "silla" enrutaba por
+  `en→ja`** y devolvía transliteraciones fonéticas japonesas
+  (シツラ / シツラマエ / シツラート) desde Jisho. Causa: `detect_source`
+  sólo marca un texto como español cuando ve marcas fuertes (¿¡áéíóúñ).
+  Una palabra corta como "silla" o "casa" sin acentos se etiqueta
+  como `en` por defecto, y el viejo `do_lookup_auto` interpretaba
+  "source detectado ≠ source global" como señal para sobreescribir
+  al global. Eso es correcto cuando el script cambia (latino → CJK,
+  latino → hangul), pero es incorrecto cuando ambos son latinos,
+  porque entonces la "detección" es en realidad un defecto, no
+  evidencia. Ahora `do_lookup_auto` compara la *familia de script*
+  (latin / cjk / hangul) en vez del código ISO: si ambas son la
+  misma familia, respeta el par global del usuario; sólo sobreescribe
+  cuando el script detectado pertenece claramente a otra familia
+  (p. ej. seleccionar 椅子 en una tarjeta con global `en→es`).
+  Verificado para las 21 combinaciones `global × texto_seleccionado`
+  de los 9 pares soportados.
+- **El diálogo de configuración permitía marcar a la vez "Sustituir
+  existente" y "Añadir al final"**, que son acciones mutuamente
+  excluyentes: la lógica de escritura usa un único modo, y con los
+  dos activos ganaba `append` — contraintuitivo para quien había
+  marcado "Sustituir" pensando que desactivaba lo anterior. Ahora
+  marcar uno desmarca el otro automáticamente. Se admite el estado
+  "ninguno marcado" = "no tocar campos que ya tengan contenido"
+  (comportamiento anterior).
+
+### Cambiado
+- Configuraciones antiguas con ambos flags activos se normalizan al
+  abrir el diálogo: prevalece `append_mode` (que era el que ganaba
+  en la lógica de escritura) y `overwrite_existing` queda a `false`.
+
 ## [1.4.2] - 2026-04-24
 
 ### Arreglado

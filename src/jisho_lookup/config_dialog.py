@@ -88,8 +88,17 @@ class ConfigDialog(QDialog):
         opts = QHBoxLayout()
         self.include_reading_cb = QCheckBox(tr("config.include_reading"))
         self.include_pos_cb = QCheckBox(tr("config.include_pos"))
+        # `overwrite_cb` y `append_cb` son **mutuamente excluyentes**:
+        # el flujo de escritura (`_write_to_current_card`) usa un único
+        # "modo" y tener los dos activos era una configuración ambigua
+        # (en la práctica ganaba `append`, lo que no se correspondía con
+        # la intención típica de quien marcaba "Sustituir"). Mantenemos
+        # dos QCheckBox separados en vez de radios porque admitimos el
+        # caso "ninguno marcado" = "no tocar campos con contenido".
         self.overwrite_cb = QCheckBox(tr("config.overwrite"))
         self.append_cb = QCheckBox(tr("config.append"))
+        self.overwrite_cb.toggled.connect(self._on_overwrite_toggled)
+        self.append_cb.toggled.connect(self._on_append_toggled)
         self.picker_multi_cb = QCheckBox(tr("config.multi_select"))
         for cb in (self.include_reading_cb, self.include_pos_cb, self.overwrite_cb,
                    self.append_cb, self.picker_multi_cb):
@@ -167,8 +176,17 @@ class ConfigDialog(QDialog):
 
         self.include_reading_cb.setChecked(bool(self.config.get("include_reading", True)))
         self.include_pos_cb.setChecked(bool(self.config.get("include_parts_of_speech", True)))
-        self.overwrite_cb.setChecked(bool(self.config.get("overwrite_existing", False)))
-        self.append_cb.setChecked(bool(self.config.get("append_mode", False)))
+        # Legacy: si el config antiguo tenía los dos flags activos (estado
+        # inconsistente porque la UI los dejaba marcar a la vez), damos
+        # prioridad a `append` — que era el que ganaba en la lógica de
+        # escritura — y desactivamos `overwrite` para que la UI refleje
+        # la semántica real al abrir el diálogo.
+        overwrite = bool(self.config.get("overwrite_existing", False))
+        append = bool(self.config.get("append_mode", False))
+        if overwrite and append:
+            overwrite = False
+        self.overwrite_cb.setChecked(overwrite)
+        self.append_cb.setChecked(append)
         self.picker_multi_cb.setChecked(bool(self.config.get("picker_multi_select", True)))
 
         fieldmap: Dict[str, List[str]] = dict(self.config.get("note_type_field_map") or {})
@@ -180,6 +198,22 @@ class ConfigDialog(QDialog):
             self._append_row(nt, ", ".join(fields or []))
 
         self._reload_dicts()
+
+    def _on_overwrite_toggled(self, checked: bool) -> None:
+        """Fuerza exclusión mutua: marcar 'Sustituir' desmarca 'Añadir'."""
+        if checked and self.append_cb.isChecked():
+            # blockSignals evita un loop si alguna vez se reconectan las
+            # señales en ambos sentidos.
+            self.append_cb.blockSignals(True)
+            self.append_cb.setChecked(False)
+            self.append_cb.blockSignals(False)
+
+    def _on_append_toggled(self, checked: bool) -> None:
+        """Fuerza exclusión mutua: marcar 'Añadir' desmarca 'Sustituir'."""
+        if checked and self.overwrite_cb.isChecked():
+            self.overwrite_cb.blockSignals(True)
+            self.overwrite_cb.setChecked(False)
+            self.overwrite_cb.blockSignals(False)
 
     def _reload_dicts(self) -> None:
         self.dict_table.setRowCount(0)

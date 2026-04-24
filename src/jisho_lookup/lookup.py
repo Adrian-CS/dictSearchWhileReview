@@ -192,6 +192,28 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
     return "", ""
 
 
+def _script_family(code: str) -> str:
+    """Agrupa códigos ISO por "clase de script" a efectos del routing auto.
+
+    El detector de lengua sólo tiene dos señales fuertes: la presencia
+    de caracteres CJK (→ ja) o Hangul (→ ko). Para el resto (en/es)
+    decide a partir de marcas de puntuación (¿¡) y acentos, lo cual es
+    *muy* poco fiable en palabras cortas: "silla", "casa" o "hola" no
+    llevan marcas y el detector los etiqueta como "en" por defecto.
+
+    Por eso, cuando el script detectado y el del par global **son del
+    mismo tipo** (ambos latinos), la detección no aporta información
+    nueva: confiamos en el par global del usuario. Sólo cuando el
+    script claramente *cambia* (latino → CJK o al revés) la detección
+    sobreescribe al global.
+    """
+    if code == "ja":
+        return "cjk"
+    if code == "ko":
+        return "hangul"
+    return "latin"  # en, es, cualquier otro latino
+
+
 def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
     """Variante para el atajo rápido con routing por lengua detectada.
 
@@ -199,15 +221,17 @@ def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
 
     * Detectamos la lengua del texto seleccionado y obtenemos el par
       lógico para ese source (`lang.auto_detect_pair`).
-    * Si el *source* detectado difiere del *source* del par global, el
-      par detectado toma prioridad. Esto evita que, con global `ja→en`,
-      seleccionar "space" en la carta vuelva definiciones **como si**
-      el texto fuera japonés (Jisho cruza entre idiomas y devolvía
-      `空き` con sus glosas inglesas, que es lo que el usuario ya tiene
-      en la carta). Ahora esa selección se enruta por `en→ja` y entra
-      en la rama `hide_text` de `format_picked_choices`.
-    * Si el global falla y el detectado difiere, intentamos el
-      detectado como segundo paso (y viceversa).
+    * Si el *script* detectado difiere del *script* del par global
+      (p. ej. detectado "ja" sobre un global `en→es`), el par detectado
+      toma prioridad. Esto evita que seleccionar 漢字 en una tarjeta
+      inglesa devuelva resultados mirando el texto como si fuera inglés.
+    * Si ambos scripts pertenecen a la **misma familia** (p. ej. ambos
+      latinos: detectado "en" y global `es→ja`), la detección no es
+      fiable — `_has_spanish_markers` sólo mira ¿¡áéíóúñ y palabras como
+      "silla" o "casa" se etiquetan como "en" por defecto. En ese caso
+      respetamos el par global: el usuario ha configurado `es→ja`
+      precisamente para este tipo de texto.
+    * Si el intento primario falla, probamos el otro como secundario.
 
     Con `language_pair_auto_fallback = False` se respeta estrictamente
     el par global, sin detección.
@@ -226,13 +250,13 @@ def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
     g_src, _ = lang.pair_parts(global_pair)
     d_src, _ = lang.pair_parts(detected)
 
-    # Si el texto parece claramente de otra lengua (source distinto),
-    # el par detectado es más fiable. En caso contrario, el global
-    # refleja mejor la preferencia del usuario (ej. ja→en vs es→en
-    # cuando el target del global sería distinto al del detectado).
-    if d_src != g_src:
+    if _script_family(d_src) != _script_family(g_src):
+        # El texto pertenece claramente a otro sistema de escritura que
+        # el par global — confiamos en el detector.
         primary, secondary = detected, global_pair
     else:
+        # Misma familia de script: la detección es ambigua. El par global
+        # refleja la preferencia real del usuario.
         primary, secondary = global_pair, detected
 
     html, source = do_lookup(query, config, pair=primary)
