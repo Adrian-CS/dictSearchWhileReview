@@ -4,10 +4,12 @@
 
 Selecciona una palabra durante la revisión de una tarjeta, pulsa un
 atajo y el add-on busca su definición y la inserta automáticamente en
-un campo configurable. Soporta **cuatro pares de idioma** (ja↔en,
-es↔en) con [Jisho](https://jisho.org/) para japonés y
-[Wiktionary](https://wiktionary.org/) para español, con *fallback* a
-**diccionarios locales Yomichan / Yomitan** que tú mismo proporciones.
+un campo configurable. Soporta **nueve pares de idioma** — ja↔en,
+es↔en, ja↔es, ko↔en y ko→ja — usando [Jisho](https://jisho.org/)
+para ja↔en y [Wiktionary](https://wiktionary.org/) (en/es) para el
+resto, con *fallback* a **diccionarios locales Yomichan / Yomitan**
+que tú mismo proporciones. El par `ko→ja` usa **sólo** diccionarios
+locales (no hay fuente online fiable).
 
 La interfaz del add-on está disponible en **inglés, español y
 japonés**; elige el idioma automáticamente según la interfaz de Anki.
@@ -21,11 +23,14 @@ Compatible con **Anki 2.1.60+** (Qt6).
   - `Ctrl+Shift+S` (por defecto) — **popup de selección**: elige campo,
     modo (sustituir / añadir), idioma, si se muestran etiquetas
     gramaticales y qué acepciones insertar.
-- **Pares de idioma**: `ja→en`, `en→ja`, `es→en`, `en→es`. Se elige uno
-  por defecto en la configuración y puede cambiarse por-uso en el popup.
+- **Pares de idioma**: `ja↔en`, `es↔en`, `ja↔es`, `ko↔en`, `ko→ja`.
+  Se elige uno por defecto en la configuración y puede cambiarse
+  por-uso en el popup.
 - **Auto-detección** de idioma en el atajo rápido: si el par por
-  defecto no devuelve nada, re-intenta con el par auto-detectado
-  (CJK → ja, marcas españolas → es, Latin → en).
+  defecto no devuelve nada — o si el texto seleccionado está
+  claramente en otro idioma — el add-on re-enruta al par
+  auto-detectado (Hangul → ko, CJK → ja, marcas españolas → es,
+  Latin → en).
 - Tres estrategias: `Online → Local`, `Solo online`, `Solo local`.
 - **Mapeo de campos por tipo de nota**: define qué campo usar en cada
   notetype y una lista ordenada de nombres alternativos (`Significado`,
@@ -98,9 +103,11 @@ descartar problemas de atajo.
   - `jisho_then_local` (recomendada) — prueba online, fallback local.
   - `local_only` — todo offline.
   - `jisho_only` — solo online, sin fallback.
-- **Par de idioma (por defecto)**: `ja_en`, `en_ja`, `es_en`, `en_es`.
-  Se elige en la configuración y determina qué fuente online se usa
-  (Jisho para pares japoneses, Wiktionary para pares españoles).
+- **Par de idioma (por defecto)**: cualquiera de los nueve pares
+  soportados. Se elige en la configuración y determina qué fuente
+  online se usa (Jisho para `ja↔en`; en.wiktionary para `es↔en` y
+  `ko↔en`; es.wiktionary para `ja↔es`; `ko→ja` usa sólo
+  diccionarios locales).
 - **Auto-detectar idioma si el par por defecto no da resultados**: si
   está activo, el atajo rápido re-intenta con el par auto-detectado
   cuando el par por defecto no encuentra nada.
@@ -139,10 +146,19 @@ dictionaries/
     daijirin.zip
 ```
 
-Puedes obtenerlos desde la comunidad de Yomitan. El add-on indexa al
-arrancar Anki, soporta tanto el formato clásico (`glossary` como lista
-de strings) como el moderno `structured-content`, y consulta todos los
-activos simultáneamente.
+Dónde conseguirlos:
+
+- **Japonés**: [diccionarios de la comunidad Yomitan](https://github.com/themoeway/yomitan-dictionaries)
+  (JMdict, Jitendex, Daijirin, Shinmeikai, NHK, etc.).
+- **Coreano**: [MarvNC/yomitan-dictionaries](https://github.com/MarvNC/yomitan-dictionaries)
+  tiene una sección coreana con `daum-extracted` (ko→ko), `KRDict`
+  (multilingüe), `kengdic` (ko→en) y más. El Discord de Yomitan
+  (canales `#dictionaries` / `#korean`) es donde se comparten los
+  dumps más recientes.
+
+El add-on indexa al arrancar Anki, soporta tanto el formato clásico
+(`glossary` como lista de strings) como el moderno
+`structured-content`, y consulta todos los activos simultáneamente.
 
 ## Idioma de la interfaz
 

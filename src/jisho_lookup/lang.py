@@ -10,10 +10,20 @@ from typing import Dict, List, Optional, Tuple
 # Nota: el label visible se obtiene vía `i18n.tr("pair.<pair_id>")` para que
 # se traduzca al idioma de la UI de Anki; aquí sólo guardamos la estructura.
 PAIRS: Dict[str, dict] = {
+    # Japonés ↔ inglés (Jisho)
     "ja_en": {"src": "ja", "tgt": "en"},
     "en_ja": {"src": "en", "tgt": "ja"},
+    # Español ↔ inglés (en.wiktionary REST + Translations)
     "es_en": {"src": "es", "tgt": "en"},
     "en_es": {"src": "en", "tgt": "es"},
+    # Japonés ↔ español (es.wiktionary)
+    "ja_es": {"src": "ja", "tgt": "es"},
+    "es_ja": {"src": "es", "tgt": "ja"},
+    # Coreano ↔ inglés (en.wiktionary REST + Translations)
+    "ko_en": {"src": "ko", "tgt": "en"},
+    "en_ko": {"src": "en", "tgt": "ko"},
+    # Coreano → japonés (sólo diccionarios locales Yomitan)
+    "ko_ja": {"src": "ko", "tgt": "ja"},
 }
 
 DEFAULT_PAIR = "ja_en"
@@ -62,6 +72,20 @@ def _has_cjk(text: str) -> bool:
     return False
 
 
+def _has_hangul(text: str) -> bool:
+    for ch in text:
+        cp = ord(ch)
+        if (
+            0xAC00 <= cp <= 0xD7AF      # Hangul Syllables
+            or 0x1100 <= cp <= 0x11FF   # Hangul Jamo
+            or 0x3130 <= cp <= 0x318F   # Hangul Compatibility Jamo
+            or 0xA960 <= cp <= 0xA97F   # Hangul Jamo Extended-A
+            or 0xD7B0 <= cp <= 0xD7FF   # Hangul Jamo Extended-B
+        ):
+            return True
+    return False
+
+
 def _has_spanish_markers(text: str) -> bool:
     return any(ch in _SPANISH_CHARS for ch in text)
 
@@ -82,9 +106,20 @@ def _is_mostly_latin(text: str) -> bool:
 
 
 def detect_source(text: str) -> str:
-    """Devuelve 'ja', 'en' o 'es' según el texto. Default: 'en'."""
+    """Devuelve 'ja', 'ko', 'en' o 'es' según el texto. Default: 'en'.
+
+    Orden de comprobación:
+      1. Hangul → 'ko'. Se prueba antes que CJK porque algunas palabras
+         coreanas pueden mezclar hanja con hangul; si hay al menos una
+         sílaba hangul, la palabra es coreana.
+      2. CJK (hiragana/katakana/kanji) → 'ja'.
+      3. Marcas de español (¿¡áéíóúñ) → 'es'.
+      4. Latino → 'en'.
+    """
     if not text:
         return "en"
+    if _has_hangul(text):
+        return "ko"
     if _has_cjk(text):
         return "ja"
     if _has_spanish_markers(text):
@@ -97,9 +132,17 @@ def detect_source(text: str) -> str:
 def auto_detect_pair(text: str, global_pair: str = DEFAULT_PAIR) -> str:
     """Detecta el par más probable a partir del texto.
 
-    Heurística: detectamos el *source* (ja/en/es). El *target* lo tomamos de
-    `global_pair` si es coherente; si no, usamos un default sensato:
-      ja → en,  es → en,  en → el tgt de `global_pair` o 'ja'.
+    Heurística: detectamos el *source* (ja/en/es/ko). El *target* lo tomamos
+    de `global_pair` si la combinación existe; si no, aplicamos un default
+    razonable.
+
+    Reglas por source:
+      * `ja` → preferimos el tgt del par global si es en/es; si no, 'en'.
+      * `ko` → preferimos el tgt del par global si es en/ja; si no, 'en'.
+      * `es` → preferimos el tgt del par global si es en/ja; si no, 'en'.
+      * `en` → preferimos el tgt del par global si es ja/es/ko; si el par
+        global tenía 'en' como tgt, invertimos hacia su src (ja/es/ko); si
+        nada aplica, caemos a 'ja' (default histórico).
     """
     src = detect_source(text)
 
@@ -110,17 +153,15 @@ def auto_detect_pair(text: str, global_pair: str = DEFAULT_PAIR) -> str:
         g_src, g_tgt = ("ja", "en")
 
     if src == "ja":
-        tgt = "en"
+        tgt = g_tgt if g_tgt in ("en", "es") else "en"
+    elif src == "ko":
+        tgt = g_tgt if g_tgt in ("en", "ja") else "en"
     elif src == "es":
-        tgt = "en"
+        tgt = g_tgt if g_tgt in ("en", "ja") else "en"
     else:  # src == "en"
-        # Preferimos el target del par global si es ja/es. Si el par global
-        # ya tiene 'en' como target (ej. es_en, ja_en) invertimos hacia el
-        # source de ese par (es/ja) para mantener coherencia. Si nada
-        # aplica, caemos a 'ja' como default histórico.
-        if g_tgt in ("ja", "es"):
+        if g_tgt in ("ja", "es", "ko"):
             tgt = g_tgt
-        elif g_src in ("ja", "es"):
+        elif g_src in ("ja", "es", "ko"):
             tgt = g_src
         else:
             tgt = "ja"
@@ -140,13 +181,26 @@ def auto_detect_pair(text: str, global_pair: str = DEFAULT_PAIR) -> str:
 
 
 def sources_for_pair(pair_id: str) -> List[str]:
-    """Qué fuentes online aplican a cada par. Local siempre es fallback."""
+    """Qué fuentes online aplican a cada par. Local siempre es fallback.
+
+    Mapa actual:
+      * ja↔en         → Jisho
+      * es↔en, ko↔en  → Wiktionary (en.wiktionary REST / Translations)
+      * ja↔es         → Wiktionary (es.wiktionary: secciones `{{lengua|ja}}`
+                        y Traducciones con `{{t|ja|…}}`)
+      * ko→ja         → ninguno online; sólo diccionarios locales (Yomitan).
+    """
     src, tgt = pair_parts(pair_id)
     if {src, tgt} == {"ja", "en"}:
         return ["jisho"]
     if {src, tgt} == {"es", "en"}:
         return ["wiktionary"]
-    return []  # desconocido: solo local
+    if {src, tgt} == {"ko", "en"}:
+        return ["wiktionary"]
+    if {src, tgt} == {"ja", "es"}:
+        return ["wiktionary"]
+    # ko↔ja y otros casos exóticos: sin backend online.
+    return []
 
 
 def normalize_pair(pair_id: Optional[str]) -> str:

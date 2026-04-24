@@ -3,6 +3,119 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.4.2] - 2026-04-24
+
+### Arreglado
+- **`en→es` insertaba la glosa inglesa como si fuera la definición del
+  término español**: para "space" el add-on ponía
+  `**espacio**` seguido de `1. physical extent in two or three dimensions`,
+  que a simple vista parece una definición *de* "espacio" en inglés, lo
+  cual es absurdo en una tarjeta que quieres en español. La glosa sale
+  del bloque `{{trans-top|gloss}}` de en.wiktionary y siempre está en
+  el idioma source (inglés aquí). Ahora la regla `hide_text` de
+  `format_picked_choices` se aplica a cualquier par `en→*` y a `es→ja`:
+  todos los caminos que usan el backend de *Translations* ocultan la
+  glosa porque duplica la palabra del query que el usuario acaba de
+  seleccionar en la propia carta.
+- **`do_lookup` enruta todas las traducciones Wiktionary por el mismo
+  camino** que `en→ja` con Jisho (dedupe por palabra + render vía
+  `format_picked_choices`). Antes sólo `en→ja` y `es→ja` iban por ahí;
+  `en→es` y `en→ko` caían en `format_entries` y mostraban la glosa.
+
+### Cambiado
+- `format_picked_choices` en modo `single_word` + `hide_text`: si todas
+  las acepciones colapsan a una única palabra (caso típico tras el
+  dedupe: "space" → sólo `espacio`), integra las POSes únicas en la
+  cabecera (`**espacio** [Sustantivo]`) y omite el `<ol>` con un único
+  "[Noun]" como pseudo-item, que no aportaba nada. Se conserva la
+  lista cuando hay anotaciones de diccionario local (`— jmdict`…) que
+  sí son información relevante.
+
+## [1.4.1] - 2026-04-24
+
+### Arreglado
+- **`es→ja` insertaba `t1=椅子` como palabra japonesa**: el regex de
+  captura de `{{trad|ja|…}}` sólo admitía el parámetro con nombre
+  `1=`, pero es.wiktionary usa también `t1=`/`tr1=`/`tr=`. La captura
+  se llevaba el prefijo pegado y acababa en la carta. Ahora el sufijo
+  del regex acepta cualquier prefijo `<letras><dígitos>=` y además hay
+  un segundo pase (`_strip_param_prefix`) por si algún caso raro se
+  escapa.
+- **`es→ja` etiquetaba los bloques como `[Etimología 1]`**: es.wiktionary
+  anida los POS bajo `=== Etimología N ===` (L3) con el POS real en
+  L4 (`==== Sustantivo femenino ====`). El parser anterior partía
+  sólo por L3 y tomaba "Etimología 1" como POS. Ahora un nuevo
+  `_walk_current_pos()` itera todas las cabeceras (L3–L6) y salta
+  las estructurales (`Etimología`, `Pronunciación`, `Traducciones`,
+  `Locuciones`, `Sinónimos`, `Antónimos`…), quedándose con el
+  siguiente heading "real" como POS actual.
+- **`es→ja` reinyectaba la glosa en español**: la glosa del bloque
+  `{{trad-arriba|…}}` está en el idioma que el usuario ya lee
+  (español en este par) y repetirla en la carta es redundante.
+  `format_picked_choices` ahora aplica `hide_text` a cualquier par
+  target→ja con source en `{en, es}`, y `do_lookup` enruta los
+  resultados de Wiktionary por el mismo camino que Jisho `en→ja`
+  (dedupe por palabra + render vía `format_picked_choices`) cuando
+  el modo es "traducciones" y el target es japonés.
+
+### Cambiado
+- Nueva forma de `WiktEntry` con campos opcionales `gloss` y
+  `translation_words`. Los backends de traducciones (en-wiki y
+  es-wiki) ahora producen **una entry por palabra traducida** en
+  vez de una entry con la glosa + varias palabras concatenadas.
+  Mantiene retro-compat rellenando `definitions = ["(gloss) palabra"]`
+  para el render clásico `format_entries` en los pares donde la
+  glosa sí debe mostrarse (p. ej. `en→es`, `en→ko`).
+
+### Añadido
+- **El popup recuerda la última decisión de "Sustituir / Añadir"**:
+  nueva clave de config `picker_last_mode`. Análoga a
+  `picker_last_include_pos`: si en una invocación del picker elegiste
+  "Añadir", la siguiente abre ya en "Añadir". Se guarda sólo al
+  aceptar el picker (evita escrituras innecesarias) y no toca los
+  globales `append_mode` / `overwrite_existing`, que siguen rigiendo
+  el atajo rápido.
+
+## [1.4.0] - 2026-04-24
+
+### Añadido
+- **Nuevos pares de idioma**:
+  - `ja↔es` (japonés ↔ español) via **es.wiktionary**. Para `ja→es`
+    usamos el parser genérico `{{lengua|ja}}` sobre el wiki español
+    (ya existente). Para `es→ja` hay un backend nuevo que lee la
+    sección `{{lengua|es}}` y extrae las traducciones de los bloques
+    `{{trad-arriba}} … {{trad-abajo}}` mediante las plantillas
+    `{{t|ja|…}}`, `{{t+|ja|…}}` y `{{trad|ja|…}}`, agrupadas por POS
+    y por glosa.
+  - `ko↔en` (coreano ↔ inglés) via **en.wiktionary**. Reutiliza el
+    backend REST `page/definition/` (mismo que `es↔en`) para `ko→en`,
+    y el parser de Translations (`{{t|ko|…}}`) para `en→ko`.
+  - `ko→ja` (coreano → japonés) **sin backend online**: se enruta
+    directamente a los diccionarios locales Yomitan/Yomichan (p. ej.
+    `daum-extracted`, `KRDict`). Comunidades donde conseguirlos:
+    `MarvNC/yomitan-dictionaries` y `themoeway/yomitan-dictionaries`
+    en GitHub, más el Discord de Yomitan.
+- **Detección de Hangul** en `lang.detect_source`: si el texto
+  seleccionado contiene al menos una sílaba hangul
+  (`AC00–D7AF`, más los rangos de Jamo), se detecta como coreano
+  antes que CJK. Esto permite usar el atajo rápido sobre palabras
+  coreanas aunque el par global sea ja↔en.
+
+### Cambiado
+- `lang.auto_detect_pair` ahora contempla `ko` como source válido y
+  prefiere el target del par global cuando es coherente (`en`/`ja`
+  para `ko`; `en`/`ja` para `es`), cayendo a `en` como default.
+- `lang.sources_for_pair` enruta explícitamente:
+  - `ja↔en` → Jisho
+  - `es↔en`, `ko↔en` → en.wiktionary (REST + Translations)
+  - `ja↔es` → es.wiktionary
+  - `ko↔ja` y exóticos → sólo diccionarios locales.
+- Las etiquetas de par (`pair.*` en `i18n.py`) se han traducido a
+  en/es/ja para los seis nuevos pares. El label de `ko→ja` aclara
+  "(sólo diccionarios locales)" / "(local dictionaries only)" /
+  "(ローカル辞書のみ)" para que el usuario entienda por qué el
+  resultado depende de los ZIP cargados.
+
 ## [1.3.3] - 2026-04-24
 
 ### Arreglado

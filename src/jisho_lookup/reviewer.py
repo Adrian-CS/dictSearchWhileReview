@@ -66,6 +66,28 @@ def _remember_picker_include_pos(value: bool) -> None:
         pass
 
 
+def _remember_picker_mode(value: str) -> None:
+    """Persiste la última decisión de 'Sustituir / Añadir' del popup.
+
+    Análogo a `_remember_picker_include_pos`: se guarda en la clave
+    independiente `picker_last_mode` para no pisar los flags globales
+    `overwrite_existing` / `append_mode` (que rigen el atajo rápido). Así
+    el usuario puede tener por defecto "sustituir" globalmente y, si en
+    el último picker eligió "añadir", el siguiente picker abre ya en
+    "añadir".
+    """
+    normalized = "append" if value == "append" else "overwrite"
+    try:
+        pkg = __name__.split(".")[0]
+        cfg = mw.addonManager.getConfig(pkg) or {}
+        if cfg.get("picker_last_mode") == normalized:
+            return  # evita escritura innecesaria
+        cfg["picker_last_mode"] = normalized
+        mw.addonManager.writeConfig(pkg, cfg)
+    except Exception:
+        pass
+
+
 def _parse_shortcut(shortcut: str) -> dict:
     """Convierte 'Ctrl+Shift+S' a {ctrl,shift,alt,meta,key}."""
     parts = [p.strip().lower() for p in (shortcut or "").split("+") if p.strip()]
@@ -246,12 +268,20 @@ def _run_picker_async(selected: str) -> None:
             field_candidates = lookup.available_field_candidates(note, config)
             initial_field = lookup.pick_target_field(note, config)
 
-        initial_mode = (
-            "append"
-            if bool(config.get("append_mode", False))
-            and not bool(config.get("overwrite_existing", False))
-            else "overwrite"
-        )
+        # Preferimos la última elección del popup (si existe); si no, caemos
+        # al estado global `append_mode` / `overwrite_existing`. La clave
+        # `picker_last_mode` se persiste sólo al aceptar el picker (ver
+        # `_remember_picker_mode`), para no pisar el global del atajo rápido.
+        remembered_mode = config.get("picker_last_mode")
+        if remembered_mode in ("append", "overwrite"):
+            initial_mode = remembered_mode
+        else:
+            initial_mode = (
+                "append"
+                if bool(config.get("append_mode", False))
+                and not bool(config.get("overwrite_existing", False))
+                else "overwrite"
+            )
 
         multi = bool(config.get("picker_multi_select", True))
 
@@ -293,9 +323,11 @@ def _run_picker_async(selected: str) -> None:
         chosen_pair = bundle["pair"]
         chosen_include_pos = bool(bundle.get("include_pos", True))
 
-        # Persistimos la decisión sólo del popup (sin tocar la global
-        # `include_parts_of_speech`, que sigue gobernando el atajo rápido).
+        # Persistimos las decisiones sólo del popup (sin tocar los globales
+        # `include_parts_of_speech` / `append_mode` / `overwrite_existing`
+        # que siguen gobernando el atajo rápido).
         _remember_picker_include_pos(chosen_include_pos)
+        _remember_picker_mode(chosen_mode)
 
         html = lookup.format_picked_choices(
             picked,

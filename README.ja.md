@@ -3,11 +3,13 @@
 **言語:** [English](./README.md) · [Español](./README.es.md) · [日本語](./README.ja.md)
 
 カードの復習中に語を選択してショートカットを押すと、アドオンが
-定義を取得して設定可能なフィールドへ自動で書き込みます。日本語は
-[Jisho](https://jisho.org/)、スペイン語は
-[Wiktionary](https://wiktionary.org/) を使い、**4つの言語ペア**
-(ja↔en, es↔en) に対応。オンラインが使えない場合は自分で用意した
-**Yomichan / Yomitan のローカル辞書 (ZIP)** にフォールバックします。
+定義を取得して設定可能なフィールドへ自動で書き込みます。**9つの
+言語ペア** に対応 — ja↔en、es↔en、ja↔es、ko↔en、ko→ja。ja↔en は
+[Jisho](https://jisho.org/)、それ以外は
+[Wiktionary](https://wiktionary.org/) (en/es) を使用し、オンラインで
+見つからない場合は自分で用意した **Yomichan / Yomitan のローカル辞書
+(ZIP)** にフォールバックします。`ko→ja` は信頼できるオンライン
+ソースが無いため **ローカル辞書のみ** を参照します。
 
 アドオンの UI は **英語・スペイン語・日本語** に対応しており、
 Anki 本体の UI 言語に合わせて自動で切り替わります。
@@ -21,10 +23,11 @@ Anki 本体の UI 言語に合わせて自動で切り替わります。
   - `Ctrl+Shift+S` (既定) — **選択ポップアップ**: フィールド、
     モード (置き換え / 追記)、言語、品詞タグの表示、および挿入する
     意味を選択できます。
-- **言語ペア**: `ja→en`, `en→ja`, `es→en`, `en→es`。設定で既定ペア
-  を選び、ポップアップからはその場で切り替え可能。
-- **クイックショートカットの自動検出**: 既定のペアで結果が無い場合、
-  選択テキストから判定したペアで再試行します (CJK → ja、
+- **言語ペア**: `ja↔en`, `es↔en`, `ja↔es`, `ko↔en`, `ko→ja`。
+  設定で既定ペアを選び、ポップアップからはその場で切り替え可能。
+- **クイックショートカットの自動検出**: 既定のペアで結果が無い場合 —
+  あるいは選択テキストが明らかに別の言語の場合 — 選択テキストから
+  判定したペアへルーティングします (ハングル → ko、CJK → ja、
   スペイン語特有の記号 → es、ラテン文字 → en)。
 - 3つの方式: `オンライン → ローカル`、`オンラインのみ`、
   `ローカルのみ`。
@@ -103,9 +106,10 @@ python3 build.py
     ローカル。
   - `local_only` — 完全オフライン。
   - `jisho_only` — オンラインのみ、フォールバック無し。
-- **既定の言語ペア**: `ja_en`、`en_ja`、`es_en`、`en_es`。設定画面
-  で選択し、どのオンラインソースを使うかを決めます
-  (日本語ペアは Jisho、スペイン語ペアは Wiktionary)。
+- **既定の言語ペア**: 上記9つのペアから選択。設定画面で選び、
+  どのオンラインソースを使うかが決まります
+  (`ja↔en` は Jisho、`es↔en` と `ko↔en` は en.wiktionary、
+  `ja↔es` は es.wiktionary、`ko→ja` はローカル辞書のみ)。
 - **既定のペアで見つからない場合は言語を自動検出**: 有効にすると、
   既定のペアで結果が無かった時に自動検出したペアで再試行します。
 - **ノートタイプごとのフィールドマッピング**:
@@ -141,10 +145,19 @@ dictionaries/
     daijirin.zip
 ```
 
-ZIP は Yomitan コミュニティから入手できます。アドオンは Anki 起動時
-にインデックスを作り、従来形式 (`glossary` が文字列リスト) と新しい
-`structured-content` 形式の両方に対応し、有効な辞書を同時に検索
-します。
+入手先:
+
+- **日本語**: [Yomitan コミュニティ辞書](https://github.com/themoeway/yomitan-dictionaries)
+  (JMdict、Jitendex、大辞林、新明解、NHK など)。
+- **韓国語**: [MarvNC/yomitan-dictionaries](https://github.com/MarvNC/yomitan-dictionaries)
+  の Korean セクションに `daum-extracted` (ko→ko)、`KRDict`
+  (多言語)、`kengdic` (ko→en) などがあります。Yomitan の Discord
+  (`#dictionaries` / `#korean` チャンネル) では最新のダンプが
+  共有されています。
+
+アドオンは Anki 起動時にインデックスを作り、従来形式 (`glossary`
+が文字列リスト) と新しい `structured-content` 形式の両方に対応し、
+有効な辞書を同時に検索します。
 
 ## UI 言語
 

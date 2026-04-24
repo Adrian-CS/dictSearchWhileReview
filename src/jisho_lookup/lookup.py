@@ -130,12 +130,45 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
                 query, src=src, tgt=tgt, timeout=wikt_timeout
             )
             if wentries:
-                html = wiktionary_client.format_entries(
-                    wentries,
-                    max_senses=max_senses,
-                    include_reading=include_reading,
-                    include_parts_of_speech=include_pos,
+                # Modo traducciones (trans-blocks de Wiktionary): una entry
+                # por palabra target con glosa en el idioma source. Toda
+                # esta ruta se renderiza con `format_picked_choices`,
+                # dedupando por palabra y dejando que `hide_text` oculte
+                # la glosa redundante (el source == la palabra del query).
+                # Aplica a `en→{ja, es, ko}` y `es→ja`.
+                #
+                # Modo definiciones (REST, parser `{{lengua|…}}`): glosas
+                # directamente en el idioma target. Se renderiza con el
+                # clásico `format_entries`. Aplica a `ja→es` y similares.
+                is_translation = any(
+                    getattr(e, "is_translation", False) for e in wentries
                 )
+                if is_translation:
+                    all_choices = wiktionary_client.entries_to_choices(wentries)
+                    seen: set = set()
+                    choices: List[dict] = []
+                    for c in all_choices:
+                        key = (c.get("word") or "", c.get("reading") or "")
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        choices.append(c)
+                        if len(choices) >= max(1, max_senses):
+                            break
+                    html = format_picked_choices(
+                        choices,
+                        config,
+                        pair=pair_id,
+                        include_pos=include_pos,
+                        include_reading=include_reading,
+                    )
+                else:
+                    html = wiktionary_client.format_entries(
+                        wentries,
+                        max_senses=max_senses,
+                        include_reading=include_reading,
+                        include_parts_of_speech=include_pos,
+                    )
                 if html:
                     return html, "wiktionary"
         if strategy == "jisho_only":
@@ -323,7 +356,16 @@ def format_picked_choices(
 
     pair_id = lang.normalize_pair(pair or config.get("language_pair"))
     src, tgt = lang.pair_parts(pair_id)
-    hide_text = (src == "en" and tgt == "ja")
+    # Ocultamos la glosa cuando está en un idioma que el usuario ya lee
+    # con fluidez (es decir, el idioma del *source* del par). Todos los
+    # backends de traducciones de Wiktionary (y los `english_definitions`
+    # de Jisho en `en→*`) ponen la glosa en ese idioma source:
+    # * `en→{ja, es, ko}`  — glosa inglesa (Jisho o en.wiktionary).
+    # * `es→ja`            — glosa española de es.wiktionary.
+    # El usuario acaba de seleccionar esa palabra en la carta, así que
+    # repetirla como "definición" sólo genera ruido. La palabra target
+    # (+ lectura + POS opcional) es lo único valioso para insertar.
+    hide_text = (src == "en") or (src == "es" and tgt == "ja")
 
     def _item_inner(c: dict) -> str:
         pos = c.get("pos") or ""
@@ -356,20 +398,47 @@ def format_picked_choices(
             head.append(f"<b>{_esc_html(w)}</b>")
         if include_reading and r and r != w:
             head.append(f"【{_esc_html(r)}】")
-        if head:
-            parts.append("".join(head))
 
-        items_html: List[str] = []
-        for c in choices:
-            inner = _item_inner(c)
-            if inner:
-                items_html.append(f"<li>{inner}</li>")
-        if items_html:
-            parts.append(
-                "<ol style='margin:4px 0 0 18px;padding:0'>"
-                + "".join(items_html)
-                + "</ol>"
-            )
+        # Cuando ocultamos la glosa, lo que queda de cada item sería sólo
+        # "[POS]" (y opcionalmente "— diccionario" si viene de un ZIP).
+        # Con una sola palabra, una lista con varios "[Noun]" repetidos es
+        # ruido sin información: integramos las POSes únicas en la cabecera
+        # y omitimos el `<ol>`. Mantenemos el listado sólo si hay alguna
+        # anotación de diccionario local, que sí es información útil.
+        has_source_annot = any(
+            (c.get("source") or "").startswith("local:") for c in choices
+        )
+        if hide_text and not has_source_annot:
+            if include_pos:
+                seen_pos: set = set()
+                pos_bits: List[str] = []
+                for c in choices:
+                    p = c.get("pos") or ""
+                    if p and p not in seen_pos:
+                        seen_pos.add(p)
+                        pos_bits.append(p)
+                if pos_bits:
+                    head.append(
+                        "<span style='color:#888;font-size:0.9em'>["
+                        + ", ".join(_esc_html(p) for p in pos_bits)
+                        + "]</span>"
+                    )
+            if head:
+                parts.append(" ".join(head))
+        else:
+            if head:
+                parts.append("".join(head))
+            items_html: List[str] = []
+            for c in choices:
+                inner = _item_inner(c)
+                if inner:
+                    items_html.append(f"<li>{inner}</li>")
+            if items_html:
+                parts.append(
+                    "<ol style='margin:4px 0 0 18px;padding:0'>"
+                    + "".join(items_html)
+                    + "</ol>"
+                )
     else:
         items_html: List[str] = []
         for c in choices:

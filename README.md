@@ -4,10 +4,12 @@
 
 Select a word while reviewing a card, press a shortcut, and the add-on
 fetches its definition and writes it into a configurable field. Supports
-**four language pairs** (ja↔en, es↔en) with
-[Jisho](https://jisho.org/) for Japanese and
-[Wiktionary](https://wiktionary.org/) for Spanish, with *fallback* to
-**local Yomichan / Yomitan dictionaries** you provide yourself.
+**nine language pairs** — ja↔en, es↔en, ja↔es, ko↔en, and ko→ja —
+using [Jisho](https://jisho.org/) for Japanese↔English and
+[Wiktionary](https://wiktionary.org/) (en/es) for everything else,
+with *fallback* to **local Yomichan / Yomitan dictionaries** you
+provide yourself. `ko→ja` only uses local dictionaries (there is no
+reliable online source).
 
 The add-on's UI is available in **English, Spanish and Japanese**; it
 picks the language automatically based on Anki's own UI language.
@@ -21,11 +23,12 @@ Compatible with **Anki 2.1.60+** (Qt6).
   - `Ctrl+Shift+S` (default) — **picker popup**: choose field, mode
     (replace / append), language, whether to show grammar tags, and
     which sense(s) to insert.
-- **Language pairs**: `ja→en`, `en→ja`, `es→en`, `en→es`. Pick a
-  default in the configuration, override per-use from the popup.
+- **Language pairs**: `ja↔en`, `es↔en`, `ja↔es`, `ko↔en`, `ko→ja`.
+  Pick a default in the configuration, override per-use from the popup.
 - **Auto-detection** for the quick shortcut: if the default pair
-  returns nothing, the add-on retries with the pair auto-detected
-  from the selected text (CJK → ja, Spanish markers → es, Latin → en).
+  returns nothing — or if the selected text is clearly in a different
+  language — the add-on routes to the pair auto-detected from the
+  text (Hangul → ko, CJK → ja, Spanish markers → es, Latin → en).
 - Three strategies: `Online → Local`, `Online only`, `Local only`.
 - **Field mapping per note type**: define which field to use per
   note type and an ordered fallback list of alternative names
@@ -97,9 +100,10 @@ shortcut-capture issues.
   - `jisho_then_local` (recommended) — try online, fall back to local.
   - `local_only` — fully offline.
   - `jisho_only` — online only, no fallback.
-- **Default language pair**: `ja_en`, `en_ja`, `es_en`, `en_es`. Picked
-  in the configuration and determines which online source is used
-  (Jisho for Japanese pairs, Wiktionary for Spanish pairs).
+- **Default language pair**: any of the nine pairs listed above.
+  Picked in the configuration and determines which online source is
+  used (Jisho for `ja↔en`, en.wiktionary for `es↔en` and `ko↔en`,
+  es.wiktionary for `ja↔es`; `ko→ja` uses only local dictionaries).
 - **Auto-detect language if the default pair returns nothing**: when
   enabled, the quick shortcut retries with the auto-detected pair
   whenever the default pair comes up empty.
@@ -137,10 +141,19 @@ dictionaries/
     daijirin.zip
 ```
 
-You can find them through the Yomitan community. The add-on indexes
-them on Anki startup, supports both the classic format (`glossary`
-as a list of strings) and the modern `structured-content`, and
-queries every active dictionary simultaneously.
+You can find them through the Yomitan community. Starting points:
+
+- **Japanese**: [Yomitan community dictionaries](https://github.com/themoeway/yomitan-dictionaries)
+  (JMdict, Jitendex, Daijirin, Shinmeikai, NHK, etc.).
+- **Korean**: [MarvNC/yomitan-dictionaries](https://github.com/MarvNC/yomitan-dictionaries)
+  has a Korean section with `daum-extracted` (ko→ko), `KRDict`
+  (multilingual), `kengdic` (ko→en) and more. The Yomitan Discord
+  `#dictionaries` / `#korean` channels share the newest dumps.
+
+The add-on indexes them on Anki startup, supports both the classic
+format (`glossary` as a list of strings) and the modern
+`structured-content`, and queries every active dictionary
+simultaneously.
 
 ## Interface language
 

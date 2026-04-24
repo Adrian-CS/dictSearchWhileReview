@@ -149,6 +149,31 @@ _STRINGS: Dict[str, Dict[str, str]] = {
         "es": "Inglés → Español",
         "ja": "英語 → スペイン語",
     },
+    "pair.ja_es": {
+        "en": "Japanese → Spanish",
+        "es": "Japonés → Español",
+        "ja": "日本語 → スペイン語",
+    },
+    "pair.es_ja": {
+        "en": "Spanish → Japanese",
+        "es": "Español → Japonés",
+        "ja": "スペイン語 → 日本語",
+    },
+    "pair.ko_en": {
+        "en": "Korean → English",
+        "es": "Coreano → Inglés",
+        "ja": "韓国語 → 英語",
+    },
+    "pair.en_ko": {
+        "en": "English → Korean",
+        "es": "Inglés → Coreano",
+        "ja": "英語 → 韓国語",
+    },
+    "pair.ko_ja": {
+        "en": "Korean → Japanese (local dictionaries only)",
+        "es": "Coreano → Japonés (sólo diccionarios locales)",
+        "ja": "韓国語 → 日本語(ローカル辞書のみ)",
+    },
 
     # ------------------------------------------------------------- picker
     "picker.window_title": {
