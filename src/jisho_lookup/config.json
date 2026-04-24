@@ -11,9 +11,9 @@
     "include_reading": true,
     "include_parts_of_speech": true,
     "picker_last_include_pos": true,
-    "picker_last_mode": "overwrite",
+    "picker_last_mode": "append",
     "overwrite_existing": false,
-    "append_mode": false,
+    "append_mode": true,
     "note_type_field_map": {
         "_default": ["Significado", "Meaning", "Definición", "Definition", "Back"]
     },

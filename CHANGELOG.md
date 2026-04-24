@@ -3,6 +3,28 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.4.5] - 2026-04-24
+
+### Cambiado
+- **`append_mode = true` por defecto** en instalaciones nuevas (antes
+  `false`). El caso de uso habitual — rellenar una tarjeta que ya
+  tiene algo en el campo de significado — se comportaba como "no
+  tocar nada" con los dos flags a `false`, obligando al usuario a
+  abrir el diálogo y marcarlo a mano. Ahora el atajo rápido añade
+  al final por defecto; se puede cambiar a "sustituir" en Configuración
+  o por-uso desde el popup. El `picker_last_mode` arranca también en
+  `"append"` para que el popup abra en el mismo modo.
+- `config.md` puesto al día para reflejar los 9 pares de idioma
+  soportados (antes sólo listaba 4), la exclusión mutua entre
+  `overwrite_existing` y `append_mode`, y la lógica script-family-aware
+  de `language_pair_auto_fallback`.
+
+### Nota sobre actualizaciones
+- Anki conserva la configuración existente del usuario al actualizar
+  un add-on, así que este cambio sólo afecta a **instalaciones nuevas**.
+  Quien ya tenga el add-on instalado con `append_mode=false` seguirá
+  con su config tal cual; puede cambiarla en el diálogo.
+
 ## [1.4.4] - 2026-04-24
 
 ### Arreglado
