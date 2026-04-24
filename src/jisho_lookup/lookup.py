@@ -89,12 +89,40 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
         if "jisho" in online_sources:
             entries = jisho_client.search(query, timeout=jisho_timeout)
             if entries:
-                html = jisho_client.format_entries(
-                    entries,
-                    max_senses=max_senses,
-                    include_reading=include_reading,
-                    include_parts_of_speech=include_pos,
-                )
+                if src == "en" and tgt == "ja":
+                    # en→ja: las english_definitions de Jisho repiten la
+                    # query en inglés (ej. "space, room" como glosa de 空き
+                    # cuando el usuario ha buscado "space"). Reutilizamos
+                    # format_picked_choices, que oculta ese texto. Como el
+                    # texto queda oculto, dos "sentidos" de la misma
+                    # palabra se renderizan idénticos — así que también
+                    # deduplicamos por (palabra, lectura). Tomamos hasta
+                    # `max_senses` candidatos distintos.
+                    all_choices = jisho_client.entries_to_choices(entries)
+                    seen: set = set()
+                    choices: List[dict] = []
+                    for c in all_choices:
+                        key = (c.get("word") or "", c.get("reading") or "")
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        choices.append(c)
+                        if len(choices) >= max(1, max_senses):
+                            break
+                    html = format_picked_choices(
+                        choices,
+                        config,
+                        pair=pair_id,
+                        include_pos=include_pos,
+                        include_reading=include_reading,
+                    )
+                else:
+                    html = jisho_client.format_entries(
+                        entries,
+                        max_senses=max_senses,
+                        include_reading=include_reading,
+                        include_parts_of_speech=include_pos,
+                    )
                 if html:
                     return html, "jisho"
         if "wiktionary" in online_sources:
@@ -132,28 +160,58 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
 
 
 def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
-    """Variante para el atajo rápido con fallback por auto-detect.
+    """Variante para el atajo rápido con routing por lengua detectada.
 
-    Intenta primero el par global; si no encuentra nada y la config permite
-    `language_pair_auto_fallback`, re-intenta con el par auto-detectado
-    (siempre que sea distinto).
+    Comportamiento con `language_pair_auto_fallback = True` (default):
+
+    * Detectamos la lengua del texto seleccionado y obtenemos el par
+      lógico para ese source (`lang.auto_detect_pair`).
+    * Si el *source* detectado difiere del *source* del par global, el
+      par detectado toma prioridad. Esto evita que, con global `ja→en`,
+      seleccionar "space" en la carta vuelva definiciones **como si**
+      el texto fuera japonés (Jisho cruza entre idiomas y devolvía
+      `空き` con sus glosas inglesas, que es lo que el usuario ya tiene
+      en la carta). Ahora esa selección se enruta por `en→ja` y entra
+      en la rama `hide_text` de `format_picked_choices`.
+    * Si el global falla y el detectado difiere, intentamos el
+      detectado como segundo paso (y viceversa).
+
+    Con `language_pair_auto_fallback = False` se respeta estrictamente
+    el par global, sin detección.
 
     Devuelve (html, fuente, pair_id_usado).
     """
     global_pair = lang.normalize_pair(config.get("language_pair"))
-    html, source = do_lookup(query, config, pair=global_pair)
-    if html:
+    auto_enabled = bool(config.get("language_pair_auto_fallback", True))
+
+    if not auto_enabled:
+        html, source = do_lookup(query, config, pair=global_pair)
         return html, source, global_pair
 
-    if not bool(config.get("language_pair_auto_fallback", True)):
-        return "", "", global_pair
-
     detected = lang.auto_detect_pair(query, global_pair=global_pair)
-    if detected == global_pair:
-        return "", "", global_pair
 
-    html, source = do_lookup(query, config, pair=detected)
-    return html, source, (detected if html else global_pair)
+    g_src, _ = lang.pair_parts(global_pair)
+    d_src, _ = lang.pair_parts(detected)
+
+    # Si el texto parece claramente de otra lengua (source distinto),
+    # el par detectado es más fiable. En caso contrario, el global
+    # refleja mejor la preferencia del usuario (ej. ja→en vs es→en
+    # cuando el target del global sería distinto al del detectado).
+    if d_src != g_src:
+        primary, secondary = detected, global_pair
+    else:
+        primary, secondary = global_pair, detected
+
+    html, source = do_lookup(query, config, pair=primary)
+    if html:
+        return html, source, primary
+
+    if secondary != primary:
+        html, source = do_lookup(query, config, pair=secondary)
+        if html:
+            return html, source, secondary
+
+    return "", "", primary
 
 
 # ---------------------------------------------------------------------------

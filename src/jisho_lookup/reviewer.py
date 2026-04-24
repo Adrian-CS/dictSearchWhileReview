@@ -47,6 +47,25 @@ def _current_config() -> dict:
     return mw.addonManager.getConfig(__name__.split(".")[0]) or {}
 
 
+def _remember_picker_include_pos(value: bool) -> None:
+    """Persiste la última decisión del toggle 'Gramática' del popup.
+
+    Se guarda en la clave independiente `picker_last_include_pos` para no
+    pisar `include_parts_of_speech` (que rige el atajo rápido). Así el
+    usuario puede tener POS activado globalmente y aun así que el popup
+    abra en "sin gramática" cuando esa fue su última elección.
+    """
+    try:
+        pkg = __name__.split(".")[0]
+        cfg = mw.addonManager.getConfig(pkg) or {}
+        if bool(cfg.get("picker_last_include_pos", True)) == bool(value):
+            return  # evita escritura innecesaria
+        cfg["picker_last_include_pos"] = bool(value)
+        mw.addonManager.writeConfig(pkg, cfg)
+    except Exception:
+        pass
+
+
 def _parse_shortcut(shortcut: str) -> dict:
     """Convierte 'Ctrl+Shift+S' a {ctrl,shift,alt,meta,key}."""
     parts = [p.strip().lower() for p in (shortcut or "").split("+") if p.strip()]
@@ -244,6 +263,15 @@ def _run_picker_async(selected: str) -> None:
                     period=2500,
                 )
 
+        # Recordamos la última decisión del usuario respecto a "Gramática"
+        # dentro del popup. Si no hay valor guardado, caemos al flag global
+        # `include_parts_of_speech`. Guardamos después de aceptar el picker
+        # (ver `_remember_picker_include_pos`).
+        remembered_pos = config.get(
+            "picker_last_include_pos",
+            config.get("include_parts_of_speech", True),
+        )
+
         bundle = picker_dialog.show_picker(
             choices,
             header=header or query,
@@ -252,9 +280,7 @@ def _run_picker_async(selected: str) -> None:
             initial_field=initial_field,
             initial_mode=initial_mode,
             initial_pair=initial_pair,
-            initial_include_pos=bool(
-                config.get("include_parts_of_speech", True)
-            ),
+            initial_include_pos=bool(remembered_pos),
             reload_fn=reload_fn,
             parent=mw,
         )
@@ -266,6 +292,10 @@ def _run_picker_async(selected: str) -> None:
         chosen_mode = bundle["mode"]
         chosen_pair = bundle["pair"]
         chosen_include_pos = bool(bundle.get("include_pos", True))
+
+        # Persistimos la decisión sólo del popup (sin tocar la global
+        # `include_parts_of_speech`, que sigue gobernando el atajo rápido).
+        _remember_picker_include_pos(chosen_include_pos)
 
         html = lookup.format_picked_choices(
             picked,
@@ -387,26 +417,59 @@ def _write_to_current_card(
 
     # Refrescar la vista.
     #
-    # Anki cachea el HTML renderizado en `card._render_output`. Si sólo
-    # llamamos `_showQuestion` / `_showAnswer` volveremos a ver el
-    # contenido viejo. Hay que invalidar el caché y recargar la carta
-    # desde la BD para forzar un render nuevo con los campos actualizados.
+    # Anki cachea dos cosas:
+    #   * `card._note`: la Nota asociada — cualquier `note[field] = ...`
+    #     se hace sobre esa instancia, pero `mw.col.update_note(note)`
+    #     persiste a DB. Tras guardar, `card.note()` sin `reload=True`
+    #     sigue devolviendo la misma instancia en memoria, que *sí* tiene
+    #     los campos nuevos; aun así forzamos `reload=True` para estar
+    #     seguros si hubiese hooks externos que hayan restaurado algo.
+    #   * `card._render_output`: el HTML ya renderizado. Si no lo
+    #     invalidamos, `_showQuestion` / `_showAnswer` vuelven a pintar
+    #     el contenido viejo.
+    #
+    # **No** sustituimos el objeto `reviewer.card` por uno nuevo obtenido
+    # con `mw.col.get_card(id)`: el objeto que usa el reviewer lleva
+    # estado que sólo se establece al mostrarse la tarjeta (en concreto
+    # `timer_started`, que usa `sched.build_answer` para calcular cuánto
+    # ha tardado el usuario). Sustituirlo hacía que al valorar la carta
+    # Anki crasheara con `TypeError: unsupported operand type(s) for -:
+    # 'float' and 'NoneType'` en `time_taken()`.
+    #
+    # Además diferimos el re-draw al siguiente tick del event loop
+    # (`QTimer.singleShot(0, ...)`) para que Qt procese antes eventos
+    # pendientes (tooltip, repaint del webview) y no colisionen con el
+    # redraw.
+    try:
+        card.note(reload=True)
+    except Exception:
+        try:
+            card._note = None  # type: ignore[attr-defined]
+        except Exception:
+            pass
     try:
         card._render_output = None  # type: ignore[attr-defined]
     except Exception:
         pass
-    try:
-        card.load()
-    except Exception:
-        pass
 
     try:
-        if reviewer.state == "answer":
-            reviewer._showAnswer()
-        else:
-            reviewer._showQuestion()
+        from aqt.qt import QTimer  # type: ignore
     except Exception:
-        pass
+        QTimer = None  # type: ignore
+
+    def _redraw() -> None:
+        try:
+            if reviewer.state == "answer":
+                reviewer._showAnswer()
+            else:
+                reviewer._showQuestion()
+        except Exception:
+            pass
+
+    if QTimer is not None:
+        QTimer.singleShot(0, _redraw)
+    else:
+        _redraw()
 
 
 # ---------------------------------------------------------------------------

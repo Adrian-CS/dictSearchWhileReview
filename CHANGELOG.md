@@ -3,6 +3,75 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.3.3] - 2026-04-24
+
+### Arreglado
+- **`Ctrl+S` sobre palabra inglesa con par global `ja→en` seguía
+  reinyectando el inglés** (regresión parcial: el `hide_text` de
+  1.2.3 + 1.3.1 está bien, pero **no se ejecutaba** porque el
+  routing nunca llegaba a `en→ja`). Causa: `do_lookup_auto` probaba
+  primero el par global. Jisho cruza entre idiomas y, buscando
+  "space" en modo `ja→en`, devolvía 空き con sus
+  `english_definitions` ("space, room, gap…"); como había resultado,
+  la función devolvía ahí y nunca reintentaba con `en→ja`. Ahora,
+  cuando `language_pair_auto_fallback` está activo y el *source*
+  detectado difiere del *source* del par global, el par detectado
+  se usa como **primario** y el global queda de segundo intento.
+  Con `auto_fallback = False` el par global sigue siendo estricto.
+- **Dedupe de candidatos en `en→ja` rápido**: como el texto de
+  sentido se oculta en ese par, dos sentidos de la misma palabra se
+  renderizaban idénticos (`空き【あき】[Noun]` dos veces). Ahora el
+  atajo rápido deduplica por `(palabra, lectura)` antes de
+  recortar a `max_senses`, así el usuario ve candidatos
+  distintos (ej. 空き / スペース / 場所).
+
+## [1.3.2] - 2026-04-24
+
+### Arreglado
+- **Crash al valorar la carta después del atajo rápido** en Anki
+  25.09.2 / Python 3.13: `TypeError: unsupported operand type(s)
+  for -: 'float' and 'NoneType'` en
+  `anki.cards.Card.time_taken`. Causa: el fix de refresh de 1.3.1
+  sustituía `reviewer.card` por una copia fresca obtenida con
+  `mw.col.get_card(id)`, pero esa copia no tiene `timer_started`
+  (sólo se fija cuando el reviewer muestra la carta). Al pulsar
+  una valoración, `sched.build_answer` llamaba a `card.time_taken()`
+  y explotaba.
+  Ahora mantenemos la misma instancia de `Card` (preservando
+  `timer_started` y demás estado del reviewer) y sólo invalidamos
+  el caché de la nota (`card.note(reload=True)`) y el caché del
+  render (`card._render_output = None`) antes de diferir el
+  re-draw con `QTimer.singleShot(0, ...)`. La carta se refresca y
+  la valoración posterior funciona.
+
+## [1.3.1] - 2026-04-23
+
+### Arreglado
+- **Atajo rápido en `en→ja` reinyectaba el inglés**: el fix de 1.2.3
+  sólo cubría el popup (`format_picked_choices`). La ruta de
+  `do_lookup` seguía llamando a `jisho_client.format_entries`, que
+  serializa las `english_definitions` íntegras. Ahora, cuando el par
+  es `en→ja`, el atajo rápido también enruta las entradas por
+  `format_picked_choices`, así que sólo se inserta palabra+lectura
+  (+ POS si está activo) en la carta.
+- **La tarjeta no se refrescaba tras el atajo rápido**: `card.load()`
+  sobre la instancia existente no siempre hacía que el reviewer
+  re-renderizara con el campo actualizado. Ahora pedimos una copia
+  fresca de la carta a la BD (`mw.col.get_card(id)`), la sustituimos
+  en `reviewer.card`, invalidamos `_render_output` y diferimos el
+  re-draw al siguiente tick del event loop (`QTimer.singleShot(0, …)`)
+  para que Qt procese primero los eventos pendientes. Esta ruta
+  bloqueaba sólo al atajo rápido porque el popup, al abrir un
+  QDialog modal, drenaba el event loop de forma natural.
+
+### Añadido
+- **El popup recuerda la última decisión de "Gramática"**: nueva
+  clave de config `picker_last_include_pos`. Si apagas el toggle en
+  una invocación del picker, la próxima vez se abre apagado. Se
+  guarda sólo cuando cambia (evita escrituras innecesarias) y no
+  afecta al flag global `include_parts_of_speech`, que sigue rigiendo
+  el atajo rápido.
+
 ## [1.3.0] - 2026-04-23
 
 ### Añadido

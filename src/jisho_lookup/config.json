@@ -10,6 +10,7 @@
     "max_senses": 3,
     "include_reading": true,
     "include_parts_of_speech": true,
+    "picker_last_include_pos": true,
     "overwrite_existing": false,
     "append_mode": false,
     "note_type_field_map": {
