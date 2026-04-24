@@ -3,6 +3,19 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.4.4] - 2026-04-24
+
+### Arreglado
+- **`es→ja` no encontraba traducciones para "espacio" aunque existían
+  en es.wiktionary**: el regex de plantillas del bloque
+  `{{trad-arriba}}…{{trad-abajo}}` aceptaba `{{t|ja|…}}`, `{{t+|ja|…}}`,
+  `{{t-|ja|…}}` y `{{trad|ja|…}}`, pero **no** las variantes históricas
+  `{{trad+|ja|…}}` / `{{trad-|ja|…}}` (marca de enlace al wiki target)
+  ni `{{tø|ja|…}}`, que sí se usan en muchos artículos. Se amplía el
+  prefijo a `(?:t[+\-]?[a-zø]?|trad[+\-]?)` para alinearlo con el
+  regex equivalente de en.wiktionary. Verificado contra 10 variantes
+  sintéticas y los mocks estándar de `{{trad-arriba}}`.
+
 ## [1.4.3] - 2026-04-24
 
 ### Arreglado

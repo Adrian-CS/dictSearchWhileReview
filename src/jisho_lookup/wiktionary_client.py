@@ -213,10 +213,19 @@ _T_TPL_SUFFIX = (
 # Plantillas de traducción en es.wiktionary:
 #   {{t|ja|椅子}}                — traducción simple
 #   {{t+|ja|椅子}}               — con link al wiki del target
+#   {{t-|ja|椅子}}               — idem, marcador negativo
+#   {{tø|ja|椅子}}               — variante rara (sin enlace)
 #   {{trad|ja|椅子}}             — forma histórica; sigue viva en muchos artículos
+#   {{trad+|ja|椅子}}            — histórica con link al wiki del target
+#   {{trad-|ja|椅子}}            — histórica con marcador negativo
 #   {{trad|ja|1=椅子|tr=isu}}    — con parámetros con nombre
 #   {{trad|ja|t1=椅子}}          — algunas plantillas usan `t1=`/`tr1=`
-_TRAD_TPL_PREFIX_ES = r"\{\{\s*(?:t[+\-]?|trad)\s*\|\s*"
+# Aceptamos las mismas variantes que `_T_TPL_PREFIX` (usado en en.wiktionary),
+# que ya cubría `t`, `t+`, `t-`, `tø`. Añadimos `trad`, `trad+`, `trad-`.
+# Sin estos sufijos en `trad`, palabras como "espacio" (cuya página en
+# es.wiktionary usa `{{trad+|ja|空間}}` en el bloque `{{trad-arriba}}`)
+# devolvían cero traducciones aunque sí estuvieran presentes en el wiki.
+_TRAD_TPL_PREFIX_ES = r"\{\{\s*(?:t[+\-]?[a-zø]?|trad[+\-]?)\s*\|\s*"
 _TRAD_TPL_SUFFIX_ES = _T_TPL_SUFFIX
 
 
