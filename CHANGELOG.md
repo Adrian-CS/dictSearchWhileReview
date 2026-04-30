@@ -3,6 +3,21 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.4.6] - 2026-04-24
+
+### Arreglado
+- **`en→ja` (y `es→ja`) con un diccionario local insertaba sólo el nombre
+  del diccionario, sin definición**: la regla `hide_text` que oculta la
+  glosa redundante de Jisho/Wiktionary en pares como `en→ja` se estaba
+  aplicando también a las choices de origen `local:*`. Pero el `text`
+  de un Yomichan/Yomitan local es la definición real en el idioma
+  target — para "table" en `en→ja` con 明鏡国語辞典, el texto era la
+  explicación japonesa completa. Al ocultarlo el campo recibía sólo
+  `<b>table</b>【テーブル】 — 明鏡国語辞典`, sin contenido útil. La regla
+  ahora se aplica por choice y exime las locales, que son siempre la
+  fuente más valiosa cuando el usuario las ha cargado. Verificado para
+  `en→ja`, `es→ja`, `ja→en` y modos mixtos online+local.
+
 ## [1.4.5] - 2026-04-24
 
 ### Cambiado

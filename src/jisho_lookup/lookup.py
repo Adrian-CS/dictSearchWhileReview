@@ -381,15 +381,27 @@ def format_picked_choices(
     pair_id = lang.normalize_pair(pair or config.get("language_pair"))
     src, tgt = lang.pair_parts(pair_id)
     # Ocultamos la glosa cuando está en un idioma que el usuario ya lee
-    # con fluidez (es decir, el idioma del *source* del par). Todos los
-    # backends de traducciones de Wiktionary (y los `english_definitions`
-    # de Jisho en `en→*`) ponen la glosa en ese idioma source:
+    # con fluidez (es decir, el idioma del *source* del par). Los backends
+    # de traducciones de Wiktionary (y los `english_definitions` de Jisho
+    # en `en→*`) ponen la glosa en ese idioma source:
     # * `en→{ja, es, ko}`  — glosa inglesa (Jisho o en.wiktionary).
     # * `es→ja`            — glosa española de es.wiktionary.
     # El usuario acaba de seleccionar esa palabra en la carta, así que
-    # repetirla como "definición" sólo genera ruido. La palabra target
-    # (+ lectura + POS opcional) es lo único valioso para insertar.
-    hide_text = (src == "en") or (src == "es" and tgt == "ja")
+    # repetirla como "definición" sólo genera ruido.
+    #
+    # IMPORTANTE: esta regla NO aplica a las entradas `local:*` (Yomichan
+    # / Yomitan): el `text` de un diccionario local es la definición real
+    # en el idioma target — para `en→ja` con 明鏡国語辞典, el text es la
+    # explicación japonesa de "table". Eso es exactamente lo que queremos
+    # mostrar; ocultarlo dejaba en el campo sólo `<b>palabra</b> — diccionario`
+    # sin contenido. La decisión `hide_text` se hace por choice mirando
+    # también el origen.
+    hide_text_pair = (src == "en") or (src == "es" and tgt == "ja")
+
+    def _should_hide_text(c: dict) -> bool:
+        if not hide_text_pair:
+            return False
+        return not (c.get("source") or "").startswith("local:")
 
     def _item_inner(c: dict) -> str:
         pos = c.get("pos") or ""
@@ -401,7 +413,7 @@ def format_picked_choices(
                 f"<span style='color:#888;font-size:0.9em'>"
                 f"[{_esc_html(pos)}]</span>"
             )
-        if not hide_text and text:
+        if not _should_hide_text(c) and text:
             bits.append(_esc_html(text))
         if source.startswith("local:"):
             bits.append(
@@ -423,16 +435,16 @@ def format_picked_choices(
         if include_reading and r and r != w:
             head.append(f"【{_esc_html(r)}】")
 
-        # Cuando ocultamos la glosa, lo que queda de cada item sería sólo
-        # "[POS]" (y opcionalmente "— diccionario" si viene de un ZIP).
-        # Con una sola palabra, una lista con varios "[Noun]" repetidos es
-        # ruido sin información: integramos las POSes únicas en la cabecera
-        # y omitimos el `<ol>`. Mantenemos el listado sólo si hay alguna
-        # anotación de diccionario local, que sí es información útil.
-        has_source_annot = any(
-            (c.get("source") or "").startswith("local:") for c in choices
-        )
-        if hide_text and not has_source_annot:
+        # Cuando ocultamos la glosa para *todos* los items, lo que queda de
+        # cada uno es sólo "[POS]". Con una sola palabra, una lista con
+        # varios "[Noun]" repetidos es ruido sin información: integramos
+        # las POSes únicas en la cabecera y omitimos el `<ol>`. Mantenemos
+        # el listado completo si **alguna** choice no tiene texto oculto
+        # (es decir, viene de un diccionario local: el `text` es la
+        # definición real en el idioma target, justo lo que el usuario
+        # quiere insertar).
+        all_text_hidden = all(_should_hide_text(c) for c in choices)
+        if all_text_hidden:
             if include_pos:
                 seen_pos: set = set()
                 pos_bits: List[str] = []
