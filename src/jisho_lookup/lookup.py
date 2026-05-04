@@ -59,15 +59,20 @@ def normalize_query(text: str) -> str:
 # Búsqueda por par concreto (sin auto-detect)
 
 
-def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str, str]:
+def do_lookup(
+    query: str, config: dict, pair: Optional[str] = None
+) -> Tuple[str, str, str]:
     """Busca en el par `pair` (o el global si None).
 
-    Devuelve (html_resultado, fuente). Fuentes posibles:
-      "jisho" | "wiktionary" | "local" | ""
+    Devuelve `(html_resultado, fuente, canonical_word)`. Fuentes posibles:
+    `"jisho" | "wiktionary" | "local" | ""`. La `canonical_word` es la
+    forma "lema" del término en el idioma source (útil para escribir en
+    el campo *frente*); cae a cadena vacía si el par opera en modo
+    traducción (en cuyo caso el caller debe usar la query literal).
     """
     query = normalize_query(query)
     if not query:
-        return "", ""
+        return "", "", ""
 
     pair_id = lang.normalize_pair(pair or config.get("language_pair"))
     src, tgt = lang.pair_parts(pair_id)
@@ -83,6 +88,16 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
 
     want_online = strategy in ("jisho_then_local", "jisho_only")
     want_local = strategy in ("jisho_then_local", "local_only")
+
+    is_trans_pair = _is_translation_mode_pair(pair_id)
+
+    def _canon_from_word(w: str) -> str:
+        # Para pares traducción la `.word` está en idioma target → no es
+        # canónica respecto a la query. Devolvemos "" para que el caller
+        # use el texto literal seleccionado.
+        if is_trans_pair:
+            return ""
+        return (w or "").strip()
 
     # 1) Fuente online según par
     if want_online:
@@ -124,7 +139,7 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
                         include_parts_of_speech=include_pos,
                     )
                 if html:
-                    return html, "jisho"
+                    return html, "jisho", _canon_from_word(entries[0].word)
         if "wiktionary" in online_sources:
             wentries = wiktionary_client.search(
                 query, src=src, tgt=tgt, timeout=wikt_timeout
@@ -170,9 +185,9 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
                         include_parts_of_speech=include_pos,
                     )
                 if html:
-                    return html, "wiktionary"
+                    return html, "wiktionary", _canon_from_word(wentries[0].word)
         if strategy == "jisho_only":
-            return "", ""
+            return "", "", ""
 
     # 2) Diccionarios locales (sólo para pares con componente japonés, ya que
     # los diccionarios Yomichan/Yomitan actuales son JP↔EN). Igualmente
@@ -187,9 +202,9 @@ def do_lookup(query: str, config: dict, pair: Optional[str] = None) -> Tuple[str
                 include_reading=include_reading,
             )
             if html:
-                return html, "local"
+                return html, "local", _canon_from_word(local[0].expression)
 
-    return "", ""
+    return "", "", ""
 
 
 def _script_family(code: str) -> str:
@@ -214,7 +229,7 @@ def _script_family(code: str) -> str:
     return "latin"  # en, es, cualquier otro latino
 
 
-def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
+def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str, str]:
     """Variante para el atajo rápido con routing por lengua detectada.
 
     Comportamiento con `language_pair_auto_fallback = True` (default):
@@ -236,14 +251,14 @@ def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
     Con `language_pair_auto_fallback = False` se respeta estrictamente
     el par global, sin detección.
 
-    Devuelve (html, fuente, pair_id_usado).
+    Devuelve `(html, fuente, pair_id_usado, canonical_word)`.
     """
     global_pair = lang.normalize_pair(config.get("language_pair"))
     auto_enabled = bool(config.get("language_pair_auto_fallback", True))
 
     if not auto_enabled:
-        html, source = do_lookup(query, config, pair=global_pair)
-        return html, source, global_pair
+        html, source, canon = do_lookup(query, config, pair=global_pair)
+        return html, source, global_pair, canon
 
     detected = lang.auto_detect_pair(query, global_pair=global_pair)
 
@@ -259,16 +274,16 @@ def do_lookup_auto(query: str, config: dict) -> Tuple[str, str, str]:
         # refleja la preferencia real del usuario.
         primary, secondary = global_pair, detected
 
-    html, source = do_lookup(query, config, pair=primary)
+    html, source, canon = do_lookup(query, config, pair=primary)
     if html:
-        return html, source, primary
+        return html, source, primary, canon
 
     if secondary != primary:
-        html, source = do_lookup(query, config, pair=secondary)
+        html, source, canon = do_lookup(query, config, pair=secondary)
         if html:
-            return html, source, secondary
+            return html, source, secondary, canon
 
-    return "", "", primary
+    return "", "", primary, ""
 
 
 # ---------------------------------------------------------------------------
@@ -518,13 +533,28 @@ def pick_target_field(note, config: dict) -> Optional[str]:
     Usa el mapeo específico del notetype si existe, si no `_default`.
     Devuelve el nombre del campo o None.
     """
+    return _pick_field_from_map(note, config, "note_type_field_map")
+
+
+def pick_word_field(note, config: dict) -> Optional[str]:
+    """Equivalente a `pick_target_field` pero para el campo "frente".
+
+    Usa `note_type_word_field_map`. El frente es donde se escribe la
+    *palabra* buscada (no la definición). Útil para cards de
+    sentence-mining: el dorso recibe la definición y el frente se
+    rellena con el término que el usuario seleccionó.
+    """
+    return _pick_field_from_map(note, config, "note_type_word_field_map")
+
+
+def _pick_field_from_map(note, config: dict, key: str) -> Optional[str]:
     try:
         model = note.note_type() or {}
     except Exception:
         model = getattr(note, "model", lambda: {})() or {}
 
     model_name = model.get("name", "") if isinstance(model, dict) else ""
-    fieldmap = config.get("note_type_field_map") or {}
+    fieldmap = config.get(key) or {}
 
     candidates: List[str] = []
     if model_name and model_name in fieldmap:
@@ -540,19 +570,23 @@ def pick_target_field(note, config: dict) -> Optional[str]:
 
 
 def available_field_candidates(note, config: dict) -> List[str]:
-    """Devuelve la lista ordenada de candidatos válidos para el picker.
+    """Lista ordenada de candidatos para el picker (campo de definición)."""
+    return _available_candidates(note, config, "note_type_field_map")
 
-    El diálogo permite cambiar manualmente el campo destino; mostramos
-    primero los candidatos definidos en `note_type_field_map` y después
-    el resto de campos de la tarjeta.
-    """
+
+def available_word_field_candidates(note, config: dict) -> List[str]:
+    """Lista ordenada de candidatos para el picker (campo *frente*)."""
+    return _available_candidates(note, config, "note_type_word_field_map")
+
+
+def _available_candidates(note, config: dict, key: str) -> List[str]:
     try:
         model = note.note_type() or {}
     except Exception:
         model = getattr(note, "model", lambda: {})() or {}
 
     model_name = model.get("name", "") if isinstance(model, dict) else ""
-    fieldmap = config.get("note_type_field_map") or {}
+    fieldmap = config.get(key) or {}
 
     preferred: List[str] = []
     if model_name and model_name in fieldmap:
@@ -570,3 +604,35 @@ def available_field_candidates(note, config: dict) -> List[str]:
             seen.add(name)
             out.append(name)
     return out
+
+
+def _is_translation_mode_pair(pair_id: str) -> bool:
+    """`True` si el par devuelve la palabra en el idioma TARGET en `.word`.
+
+    Para esos pares (`en→ja`, `en→es`, `en→ko`, `es→ja`) el `word` de
+    las choices/entries es la traducción en target, NO el lema en
+    source. Si el usuario quiere "la palabra buscada" en el frente,
+    canonical en estos casos no ayuda y debemos caer al texto literal.
+    """
+    src, tgt = lang.pair_parts(lang.normalize_pair(pair_id))
+    return (src == "en") or (src == "es" and tgt == "ja")
+
+
+def canonical_word_from_choices(
+    choices: List[dict], pair: Optional[str], fallback: str = ""
+) -> str:
+    """Forma "canónica" del término extraída de las choices del picker.
+
+    Para pares en modo *definición* (la `.word` está en el idioma
+    source — el mismo que la query), devuelve la primera `word` no
+    vacía. Para pares en modo *traducción* (la `.word` es la traducción
+    en target) la canónica no es útil como "palabra buscada" y se
+    devuelve `fallback` (típicamente el texto literal seleccionado).
+    """
+    if pair and _is_translation_mode_pair(pair):
+        return fallback
+    for c in choices:
+        w = (c.get("word") or "").strip()
+        if w:
+            return w
+    return fallback

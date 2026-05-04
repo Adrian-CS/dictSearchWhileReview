@@ -237,6 +237,29 @@ _STRINGS: Dict[str, Dict[str, str]] = {
         "ja": "(該当なし)",
     },
     "picker.insert": {"en": "Insert", "es": "Insertar", "ja": "挿入"},
+    "picker.fill_word": {
+        "en": "Fill front",
+        "es": "Rellenar frente",
+        "ja": "表面に書く",
+    },
+    "picker.fill_word_tooltip": {
+        "en": (
+            "Also write the looked-up word to the front (vocabulary) "
+            "field of the card."
+        ),
+        "es": (
+            "Escribir también la palabra buscada en el campo frente "
+            "(vocabulario) de la tarjeta."
+        ),
+        "ja": (
+            "検索した語をカードの表面(語彙)フィールドにも書き込む。"
+        ),
+    },
+    "picker.word_field": {
+        "en": "Front field:",
+        "es": "Campo frente:",
+        "ja": "表面フィールド:",
+    },
 
     # ------------------------------------------------------------- config
     "config.window_title": {
@@ -390,6 +413,70 @@ _STRINGS: Dict[str, Dict[str, str]] = {
         "es": "No puedes eliminar la fila _default.",
         "ja": "_default 行は削除できません。",
     },
+    "config.fill_word_field": {
+        "en": "Also fill front field with the looked-up word",
+        "es": "Rellenar también el campo frente con la palabra buscada",
+        "ja": "検索した語を表面フィールドにも書き込む",
+    },
+    "config.word_field_mode": {
+        "en": "Front field write mode:",
+        "es": "Modo de escritura (frente):",
+        "ja": "表面の書き込みモード:",
+    },
+    "config.word_field_mode.append": {
+        "en": "Append on new line",
+        "es": "Añadir en nueva línea",
+        "ja": "改行して追記",
+    },
+    "config.word_field_mode.overwrite": {
+        "en": "Overwrite",
+        "es": "Sobrescribir",
+        "ja": "上書き",
+    },
+    "config.word_field_canonical": {
+        "en": "Use canonical form (with fallback)",
+        "es": "Forma canónica (con fallback al texto)",
+        "ja": "見出し形を使用(失敗時は選択語)",
+    },
+    "config.word_field_canonical_tooltip": {
+        "en": (
+            "If checked, write the dictionary's matched headword "
+            "(e.g. 食べる instead of 食べました) when available; "
+            "otherwise write the literal selected text. If unchecked, "
+            "always write the literal selected text."
+        ),
+        "es": (
+            "Si está marcado, escribe el lema que el diccionario "
+            "encontró (p.ej. 食べる en vez de 食べました) cuando esté "
+            "disponible; si no, el texto seleccionado tal cual. "
+            "Sin marcar, siempre el texto literal."
+        ),
+        "ja": (
+            "オンにすると、辞書が認識した見出し語(例:食べました→食べる)"
+            "を優先し、取得できない場合は選択した語そのものを書き込む。"
+            "オフの場合は常に選択した語そのもの。"
+        ),
+    },
+    "config.word_fieldmap_title": {
+        "en": (
+            "<b>Front-field mapping per note type</b><br>"
+            "<small>Same format as above. The first existing field on "
+            "the card receives the looked-up word. Row "
+            "<i>{default_key}</i> is the fallback.</small>"
+        ),
+        "es": (
+            "<b>Mapeo del campo frente por tipo de nota</b><br>"
+            "<small>Mismo formato que arriba. El primer campo "
+            "existente en la tarjeta recibe la palabra buscada. "
+            "La fila <i>{default_key}</i> es el fallback.</small>"
+        ),
+        "ja": (
+            "<b>表面フィールドのマッピング(ノートタイプ別)</b><br>"
+            "<small>上と同じ形式。カードに存在する最初の"
+            "フィールドに検索語が書き込まれます。"
+            "<i>{default_key}</i> 行はフォールバック。</small>"
+        ),
+    },
     "config.no_dicts": {
         "en": (
             "(no ZIP detected — copy files into the 'dictionaries/' folder)"
@@ -453,6 +540,26 @@ _STRINGS: Dict[str, Dict[str, str]] = {
             "Jisho Lookup:<b>{model}</b> のフィールド設定がありません。<br>"
             "利用可能なフィールド:{fields}。<br>"
             "ツール → Jisho Lookup → 設定 を開いてください。"
+        ),
+    },
+    "reviewer.no_word_field": {
+        "en": (
+            "Jisho Lookup: front field for <b>{model}</b> not found.<br>"
+            "Available fields: {fields}.<br>"
+            "Definition was inserted; configure the front-field "
+            "mapping under Tools → Jisho Lookup → Configuration."
+        ),
+        "es": (
+            "Jisho Lookup: no se encontró campo frente para "
+            "<b>{model}</b>.<br>Campos disponibles: {fields}.<br>"
+            "La definición se insertó; configura el mapeo del campo "
+            "frente en Herramientas → Jisho Lookup → Configuración."
+        ),
+        "ja": (
+            "Jisho Lookup:<b>{model}</b> の表面フィールドが見つかりません。"
+            "<br>利用可能なフィールド:{fields}。<br>"
+            "定義は挿入されました。ツール → Jisho Lookup → 設定 で"
+            "表面フィールドのマッピングを設定してください。"
         ),
     },
     "reviewer.field_has_content": {

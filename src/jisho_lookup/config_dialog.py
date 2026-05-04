@@ -106,7 +106,7 @@ class ConfigDialog(QDialog):
         opts.addStretch(1)
         layout.addLayout(opts)
 
-        # Tabla de mapeo notetype -> campos
+        # Tabla de mapeo notetype -> campos (DEFINICIÓN / dorso)
         layout.addWidget(QLabel(
             tr("config.fieldmap_title", default_key=DEFAULT_KEY)
         ))
@@ -127,6 +127,51 @@ class ConfigDialog(QDialog):
         btn_row.addWidget(self.del_btn)
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
+
+        # ---------------------- Sección "rellenar campo frente"
+        # Toggle + opciones de modo y canónico, luego tabla análoga al
+        # mapeo principal pero para el campo del frente. Toda la sección
+        # se desactiva visualmente cuando el toggle está apagado.
+        front_row = QHBoxLayout()
+        self.fill_word_cb = QCheckBox(tr("config.fill_word_field"))
+        self.fill_word_cb.toggled.connect(self._on_fill_word_toggled)
+        front_row.addWidget(self.fill_word_cb)
+
+        front_row.addSpacing(12)
+        front_row.addWidget(QLabel(tr("config.word_field_mode")))
+        self.word_mode_combo = QComboBox()
+        self.word_mode_combo.addItem(tr("config.word_field_mode.append"), "append")
+        self.word_mode_combo.addItem(tr("config.word_field_mode.overwrite"), "overwrite")
+        front_row.addWidget(self.word_mode_combo)
+
+        front_row.addSpacing(12)
+        self.word_canonical_cb = QCheckBox(tr("config.word_field_canonical"))
+        self.word_canonical_cb.setToolTip(tr("config.word_field_canonical_tooltip"))
+        front_row.addWidget(self.word_canonical_cb)
+
+        front_row.addStretch(1)
+        layout.addLayout(front_row)
+
+        layout.addWidget(QLabel(
+            tr("config.word_fieldmap_title", default_key=DEFAULT_KEY)
+        ))
+        self.word_table = QTableWidget(0, 2)
+        self.word_table.setHorizontalHeaderLabels([
+            tr("config.col.notetype"), tr("config.col.fields")
+        ])
+        self.word_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.word_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.word_table, 1)
+
+        word_btn_row = QHBoxLayout()
+        self.word_add_btn = QPushButton(tr("config.btn.add_row"))
+        self.word_add_btn.clicked.connect(self._on_word_add_row)
+        self.word_del_btn = QPushButton(tr("config.btn.del_row"))
+        self.word_del_btn.clicked.connect(self._on_word_del_row)
+        word_btn_row.addWidget(self.word_add_btn)
+        word_btn_row.addWidget(self.word_del_btn)
+        word_btn_row.addStretch(1)
+        layout.addLayout(word_btn_row)
 
         # Diccionarios locales
         layout.addWidget(QLabel(
@@ -197,7 +242,84 @@ class ConfigDialog(QDialog):
         for nt, fields in fieldmap.items():
             self._append_row(nt, ", ".join(fields or []))
 
+        # Word-field section
+        self.fill_word_cb.setChecked(bool(self.config.get("fill_word_field", False)))
+        wmode = (self.config.get("word_field_mode") or "append").lower()
+        widx = max(0, self.word_mode_combo.findData(wmode))
+        self.word_mode_combo.setCurrentIndex(widx)
+        self.word_canonical_cb.setChecked(
+            bool(self.config.get("word_field_canonical", False))
+        )
+
+        word_map: Dict[str, List[str]] = dict(
+            self.config.get("note_type_word_field_map") or {}
+        )
+        if DEFAULT_KEY not in word_map:
+            word_map[DEFAULT_KEY] = ["Front", "Expression", "Word", "Vocabulary"]
+        for nt, fields in word_map.items():
+            self._append_word_row(nt, ", ".join(fields or []))
+
+        # Habilitar/deshabilitar la sección frente según el toggle
+        self._on_fill_word_toggled(self.fill_word_cb.isChecked())
+
         self._reload_dicts()
+
+    def _on_fill_word_toggled(self, checked: bool) -> None:
+        """Atenúa/activa la sección "frente" según el toggle global."""
+        for w in (self.word_mode_combo, self.word_canonical_cb,
+                  self.word_table, self.word_add_btn, self.word_del_btn):
+            w.setEnabled(bool(checked))
+
+    def _append_word_row(self, notetype: str, fields: str) -> None:
+        r = self.word_table.rowCount()
+        self.word_table.insertRow(r)
+        self.word_table.setItem(r, 0, QTableWidgetItem(notetype))
+        self.word_table.setItem(r, 1, QTableWidgetItem(fields))
+
+    def _on_word_add_row(self) -> None:
+        models: List[str] = []
+        try:
+            models = [m["name"] for m in mw.col.models.all()]
+        except Exception:
+            pass
+        picker = QDialog(self)
+        picker.setWindowTitle(tr("config.add_notetype_title"))
+        v = QVBoxLayout(picker)
+        v.addWidget(QLabel(tr("config.notetype_label")))
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.addItems(models)
+        v.addWidget(combo)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        ok = QPushButton(tr("common.ok"))
+        ok.clicked.connect(picker.accept)
+        cancel = QPushButton(tr("common.cancel"))
+        cancel.clicked.connect(picker.reject)
+        row.addWidget(cancel)
+        row.addWidget(ok)
+        v.addLayout(row)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
+        name = combo.currentText().strip()
+        if not name:
+            return
+        self._append_word_row(name, "Front, Expression, Word")
+
+    def _on_word_del_row(self) -> None:
+        rows = sorted(
+            {i.row() for i in self.word_table.selectedIndexes()}, reverse=True
+        )
+        for r in rows:
+            key = self.word_table.item(r, 0).text() if self.word_table.item(r, 0) else ""
+            if key == DEFAULT_KEY:
+                QMessageBox.information(
+                    self,
+                    tr("common.addon_name"),
+                    tr("config.cannot_delete_default"),
+                )
+                continue
+            self.word_table.removeRow(r)
 
     def _on_overwrite_toggled(self, checked: bool) -> None:
         """Fuerza exclusión mutua: marcar 'Sustituir' desmarca 'Añadir'."""
@@ -320,6 +442,25 @@ class ConfigDialog(QDialog):
         if set(enabled_dicts) == set(all_names):
             enabled_dicts = []
 
+        # Mapa del campo frente
+        word_map: Dict[str, List[str]] = {}
+        for r in range(self.word_table.rowCount()):
+            key_item = self.word_table.item(r, 0)
+            val_item = self.word_table.item(r, 1)
+            if not key_item:
+                continue
+            key = key_item.text().strip()
+            if not key:
+                continue
+            raw = val_item.text() if val_item else ""
+            fields = [p.strip() for p in raw.split(",") if p.strip()]
+            if fields:
+                word_map[key] = fields
+        if DEFAULT_KEY not in word_map:
+            word_map[DEFAULT_KEY] = [
+                "Front", "Expression", "Word", "Vocabulary", "Vocab"
+            ]
+
         new_conf = dict(self.config)
         new_conf.update({
             "shortcut": self.shortcut_edit.text().strip() or "Ctrl+S",
@@ -333,6 +474,10 @@ class ConfigDialog(QDialog):
             "overwrite_existing": self.overwrite_cb.isChecked(),
             "append_mode": self.append_cb.isChecked(),
             "note_type_field_map": fieldmap,
+            "fill_word_field": self.fill_word_cb.isChecked(),
+            "word_field_mode": self.word_mode_combo.currentData() or "append",
+            "word_field_canonical": self.word_canonical_cb.isChecked(),
+            "note_type_word_field_map": word_map,
             "enabled_local_dicts": enabled_dicts,
         })
         mw.addonManager.writeConfig(__name__.split(".")[0], new_conf)

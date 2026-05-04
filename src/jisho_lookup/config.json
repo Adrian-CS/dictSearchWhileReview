@@ -17,6 +17,13 @@
     "note_type_field_map": {
         "_default": ["Significado", "Meaning", "Definición", "Definition", "Back"]
     },
+    "fill_word_field": false,
+    "word_field_mode": "append",
+    "word_field_canonical": false,
+    "picker_last_fill_word": false,
+    "note_type_word_field_map": {
+        "_default": ["Front", "Expression", "Word", "Vocabulary", "Vocab"]
+    },
     "enabled_local_dicts": [],
     "show_tooltip_on_success": true,
     "show_tooltip_on_error": true

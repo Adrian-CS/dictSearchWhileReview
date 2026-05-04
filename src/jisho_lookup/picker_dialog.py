@@ -37,7 +37,10 @@ ReloadFn = Callable[[str], Tuple[List[dict], str]]
 
 
 class PickerResult:
-    __slots__ = ("picked", "field", "mode", "pair", "include_pos")
+    __slots__ = (
+        "picked", "field", "mode", "pair", "include_pos",
+        "fill_word", "word_field",
+    )
 
     def __init__(
         self,
@@ -46,12 +49,16 @@ class PickerResult:
         mode: str,
         pair: str,
         include_pos: bool,
+        fill_word: bool = False,
+        word_field: str = "",
     ):
         self.picked = picked
         self.field = field
         self.mode = mode
         self.pair = pair
         self.include_pos = include_pos
+        self.fill_word = fill_word
+        self.word_field = word_field
 
     def as_dict(self) -> dict:
         return {
@@ -60,6 +67,8 @@ class PickerResult:
             "mode": self.mode,
             "pair": self.pair,
             "include_pos": self.include_pos,
+            "fill_word": self.fill_word,
+            "word_field": self.word_field,
         }
 
 
@@ -82,6 +91,9 @@ class DefinitionPicker(QDialog):
         initial_mode: str = "overwrite",  # "overwrite" | "append"
         initial_pair: str = lang.DEFAULT_PAIR,
         initial_include_pos: bool = True,
+        initial_fill_word: bool = False,
+        word_field_candidates: Optional[List[str]] = None,
+        initial_word_field: Optional[str] = None,
         reload_fn: Optional[ReloadFn] = None,
         parent=None,
     ):
@@ -159,6 +171,36 @@ class DefinitionPicker(QDialog):
         top.addWidget(self.lang_combo)
 
         root.addLayout(top)
+
+        # -------------------------------------------------- fila frente
+        # Segundo toolbar opcional: "Frente" toggle + combo de campo
+        # frente. La fila vive siempre (consistencia visual), pero el
+        # combo se desactiva si el toggle está apagado para que se vea
+        # claro que no se va a usar.
+        front_row = QHBoxLayout()
+        self.fill_word_check = QCheckBox(tr("picker.fill_word"))
+        self.fill_word_check.setToolTip(tr("picker.fill_word_tooltip"))
+        self.fill_word_check.setChecked(bool(initial_fill_word))
+        self.fill_word_check.toggled.connect(self._on_fill_word_toggled)
+        front_row.addWidget(self.fill_word_check)
+
+        front_row.addSpacing(12)
+        front_row.addWidget(QLabel(tr("picker.word_field")))
+        self.word_field_combo = QComboBox()
+        wcands = list(word_field_candidates or [])
+        for f in wcands:
+            self.word_field_combo.addItem(f)
+        if initial_word_field and initial_word_field in wcands:
+            self.word_field_combo.setCurrentText(initial_word_field)
+        elif wcands:
+            self.word_field_combo.setCurrentIndex(0)
+        self.word_field_combo.setMinimumWidth(180)
+        front_row.addWidget(self.word_field_combo)
+
+        front_row.addStretch(1)
+        root.addLayout(front_row)
+        # Estado inicial coherente con el toggle.
+        self.word_field_combo.setEnabled(self.fill_word_check.isChecked())
 
         # -------------------------------------------------- hint
         self._hint = QLabel()
@@ -249,6 +291,11 @@ class DefinitionPicker(QDialog):
             self.list_widget.setCurrentRow(current)
 
     # ------------------------------------------------------------------
+    def _on_fill_word_toggled(self, checked: bool) -> None:
+        """Activa/desactiva el combo del campo frente al alternar el toggle."""
+        self.word_field_combo.setEnabled(bool(checked))
+
+    # ------------------------------------------------------------------
     def _on_pair_changed(self, idx: int) -> None:
         if idx < 0 or idx >= len(self._pair_ids):
             return
@@ -328,12 +375,20 @@ class DefinitionPicker(QDialog):
         ]
         field = self.field_combo.currentText() if self.field_combo.count() else ""
         mode = "append" if self.radio_append.isChecked() else "overwrite"
+        fill_word = bool(self.fill_word_check.isChecked())
+        word_field = (
+            self.word_field_combo.currentText()
+            if self.word_field_combo.count()
+            else ""
+        )
         return PickerResult(
             picked=picked,
             field=field,
             mode=mode,
             pair=self._current_pair,
             include_pos=self._include_pos,
+            fill_word=fill_word,
+            word_field=word_field,
         )
 
 
@@ -391,12 +446,15 @@ def show_picker(
     initial_mode: str = "overwrite",
     initial_pair: str = lang.DEFAULT_PAIR,
     initial_include_pos: bool = True,
+    initial_fill_word: bool = False,
+    word_field_candidates: Optional[List[str]] = None,
+    initial_word_field: Optional[str] = None,
     reload_fn: Optional[ReloadFn] = None,
     parent=None,
 ) -> Optional[dict]:
     """Abre el diálogo. Devuelve un dict con
-    ``{picked, field, mode, pair, include_pos}`` o ``None`` si el
-    usuario cancela.
+    ``{picked, field, mode, pair, include_pos, fill_word, word_field}``
+    o ``None`` si el usuario cancela.
 
     El diálogo permite cancelar sin elegir, pero también permite cambiar
     de idioma (vía `reload_fn`) aunque la búsqueda inicial no diera
@@ -413,6 +471,9 @@ def show_picker(
         initial_mode=initial_mode,
         initial_pair=initial_pair,
         initial_include_pos=initial_include_pos,
+        initial_fill_word=initial_fill_word,
+        word_field_candidates=word_field_candidates,
+        initial_word_field=initial_word_field,
         reload_fn=reload_fn,
         parent=parent,
     )

@@ -88,6 +88,24 @@ def _remember_picker_mode(value: str) -> None:
         pass
 
 
+def _remember_picker_fill_word(value: bool) -> None:
+    """Persiste la última decisión del toggle "Frente" del popup.
+
+    Análogo a `_remember_picker_include_pos` / `_remember_picker_mode`.
+    Vive en `picker_last_fill_word` para no pisar el flag global
+    `fill_word_field`.
+    """
+    try:
+        pkg = __name__.split(".")[0]
+        cfg = mw.addonManager.getConfig(pkg) or {}
+        if bool(cfg.get("picker_last_fill_word", False)) == bool(value):
+            return
+        cfg["picker_last_fill_word"] = bool(value)
+        mw.addonManager.writeConfig(pkg, cfg)
+    except Exception:
+        pass
+
+
 def _parse_shortcut(shortcut: str) -> dict:
     """Convierte 'Ctrl+Shift+S' a {ctrl,shift,alt,meta,key}."""
     parts = [p.strip().lower() for p in (shortcut or "").split("+") if p.strip()]
@@ -210,18 +228,27 @@ def _on_js_message(handled: Tuple[bool, object], message: str, context):
 def _run_lookup_async(selected: str) -> None:
     config = _current_config()
 
-    def worker(_col) -> Tuple[str, str, str, str]:
-        html, source, used_pair = lookup.do_lookup_auto(selected, config)
-        return (selected, html, source, used_pair)
+    def worker(_col) -> Tuple[str, str, str, str, str]:
+        html, source, used_pair, canon = lookup.do_lookup_auto(selected, config)
+        return (selected, html, source, used_pair, canon)
 
-    def on_done(result: Tuple[str, str, str, str]) -> None:
-        query, html, source, used_pair = result
+    def on_done(result: Tuple[str, str, str, str, str]) -> None:
+        query, html, source, used_pair, canon = result
         if not html:
             if config.get("show_tooltip_on_error", True):
                 tooltip(tr("reviewer.not_found", query=query), period=3000)
             return
+        # Word-field: para el atajo rápido el toggle es el global
+        # `fill_word_field`; el modo y la elección canónica/literal
+        # también vienen de la config global.
+        word_to_write = ""
+        if config.get("fill_word_field", False):
+            use_canon = bool(config.get("word_field_canonical", False))
+            word_to_write = (canon if (use_canon and canon) else query)
         _write_to_current_card(
-            query, html, source, config, used_pair=used_pair
+            query, html, source, config,
+            used_pair=used_pair,
+            word_to_write=word_to_write,
         )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
@@ -262,11 +289,15 @@ def _run_picker_async(selected: str) -> None:
         # Campos candidatos (según la tarjeta actual)
         field_candidates: List[str] = []
         initial_field: Optional[str] = None
+        word_field_candidates: List[str] = []
+        initial_word_field: Optional[str] = None
         reviewer = mw.reviewer
         if reviewer is not None and reviewer.card is not None:
             note = reviewer.card.note()
             field_candidates = lookup.available_field_candidates(note, config)
             initial_field = lookup.pick_target_field(note, config)
+            word_field_candidates = lookup.available_word_field_candidates(note, config)
+            initial_word_field = lookup.pick_word_field(note, config)
 
         # Preferimos la última elección del popup (si existe); si no, caemos
         # al estado global `append_mode` / `overwrite_existing`. La clave
@@ -301,6 +332,12 @@ def _run_picker_async(selected: str) -> None:
             "picker_last_include_pos",
             config.get("include_parts_of_speech", True),
         )
+        # Igual para el toggle "Frente": viene cacheado del popup; si no
+        # hay nada cae al flag global `fill_word_field`.
+        remembered_fill_word = config.get(
+            "picker_last_fill_word",
+            config.get("fill_word_field", False),
+        )
 
         bundle = picker_dialog.show_picker(
             choices,
@@ -311,6 +348,9 @@ def _run_picker_async(selected: str) -> None:
             initial_mode=initial_mode,
             initial_pair=initial_pair,
             initial_include_pos=bool(remembered_pos),
+            initial_fill_word=bool(remembered_fill_word),
+            word_field_candidates=word_field_candidates,
+            initial_word_field=initial_word_field,
             reload_fn=reload_fn,
             parent=mw,
         )
@@ -322,12 +362,15 @@ def _run_picker_async(selected: str) -> None:
         chosen_mode = bundle["mode"]
         chosen_pair = bundle["pair"]
         chosen_include_pos = bool(bundle.get("include_pos", True))
+        chosen_fill_word = bool(bundle.get("fill_word", False))
+        chosen_word_field = bundle.get("word_field") or ""
 
         # Persistimos las decisiones sólo del popup (sin tocar los globales
         # `include_parts_of_speech` / `append_mode` / `overwrite_existing`
-        # que siguen gobernando el atajo rápido).
+        # / `fill_word_field` que siguen gobernando el atajo rápido).
         _remember_picker_include_pos(chosen_include_pos)
         _remember_picker_mode(chosen_mode)
+        _remember_picker_fill_word(chosen_fill_word)
 
         html = lookup.format_picked_choices(
             picked,
@@ -344,6 +387,17 @@ def _run_picker_async(selected: str) -> None:
         else:
             src = "mixed"
 
+        # Resolución del texto a escribir en el campo frente, si toca.
+        word_to_write = ""
+        if chosen_fill_word:
+            use_canon = bool(config.get("word_field_canonical", False))
+            if use_canon:
+                word_to_write = lookup.canonical_word_from_choices(
+                    picked, chosen_pair, fallback=query
+                )
+            else:
+                word_to_write = query
+
         _write_to_current_card(
             query,
             html,
@@ -352,6 +406,8 @@ def _run_picker_async(selected: str) -> None:
             used_pair=chosen_pair,
             override_field=chosen_field,
             override_mode=chosen_mode,
+            word_to_write=word_to_write,
+            override_word_field=chosen_word_field,
         )
 
     op = QueryOp(parent=mw, op=worker, success=on_done)
@@ -371,6 +427,8 @@ def _write_to_current_card(
     used_pair: Optional[str] = None,
     override_field: Optional[str] = None,
     override_mode: Optional[str] = None,  # "overwrite" | "append" | None
+    word_to_write: str = "",
+    override_word_field: Optional[str] = None,
 ) -> None:
     reviewer = mw.reviewer
     if reviewer is None or reviewer.card is None:
@@ -378,7 +436,7 @@ def _write_to_current_card(
     card = reviewer.card
     note = card.note()
 
-    # 1) Campo
+    # 1) Campo de definición
     if override_field and override_field in note.keys():
         field = override_field
     else:
@@ -394,7 +452,7 @@ def _write_to_current_card(
         )
         return
 
-    # 2) Modo de escritura
+    # 2) Modo de escritura del campo de definición
     if override_mode is not None:
         overwrite = override_mode == "overwrite"
         append = override_mode == "append"
@@ -416,6 +474,40 @@ def _write_to_current_card(
     else:
         note[field] = html
 
+    # 3) Campo "frente" (opcional). El back YA se ha escrito a este punto;
+    # si el word-field no existe avisamos pero NO revertimos el back, que
+    # ya es información válida para el usuario. El modo (append/overwrite)
+    # del frente es independiente del back y vive en `word_field_mode`.
+    word_field_written: Optional[str] = None
+    if word_to_write:
+        if override_word_field and override_word_field in note.keys():
+            word_field = override_word_field
+        else:
+            word_field = lookup.pick_word_field(note, config)
+        if word_field is None:
+            model = note.note_type() or {}
+            model_name = (
+                model.get("name", "?") if isinstance(model, dict) else "?"
+            )
+            available = ", ".join(note.keys())
+            tooltip(
+                tr(
+                    "reviewer.no_word_field",
+                    model=model_name,
+                    fields=available,
+                ),
+                period=5500,
+            )
+        else:
+            wmode = (config.get("word_field_mode") or "append").lower()
+            wmode = wmode if wmode in ("append", "overwrite") else "append"
+            current_w = note[word_field] or ""
+            if wmode == "append" and current_w.strip():
+                note[word_field] = current_w + "<br>" + word_to_write
+            else:
+                note[word_field] = word_to_write
+            word_field_written = word_field
+
     try:
         mw.col.update_note(note)
     except Exception:
@@ -436,11 +528,17 @@ def _write_to_current_card(
         pair_suffix = ""
         if used_pair:
             pair_suffix = f" · {lang.pair_label(used_pair)}"
+        if word_field_written:
+            # Cuando además rellenamos el frente, mostramos los dos campos
+            # afectados juntos: "Meaning + Front".
+            field_label = f"{field} + {word_field_written}"
+        else:
+            field_label = field
         tooltip(
             tr(
                 "reviewer.success",
                 query=query,
-                field=field,
+                field=field_label,
                 origin=origin,
                 pair_suffix=pair_suffix,
             ),

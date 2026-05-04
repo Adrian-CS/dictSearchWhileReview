@@ -3,6 +3,40 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.5.0] - 2026-04-24
+
+### Añadido
+- **Rellenar el campo "frente" con la palabra buscada** (sentence-mining
+  workflow). Nueva configuración global `fill_word_field` y toggle
+  análogo dentro del popup. Cuando está activo, además de escribir la
+  definición en el campo de significado el add-on escribe el término
+  buscado en el campo "frente" definido por un nuevo mapeo per-notetype
+  `note_type_word_field_map` (`_default = ["Front", "Expression",
+  "Word", "Vocabulary", "Vocab"]`).
+- Modo de escritura del frente independiente del back: clave
+  `word_field_mode` con valores `"append"` (por defecto, inserta en
+  línea nueva preservando el contenido previo) u `"overwrite"`.
+- `word_field_canonical`: opción para usar la forma canónica/lema del
+  diccionario (p.ej. 食べる en vez de 食べました) con fallback al texto
+  literal seleccionado. Por defecto `false` (siempre el texto literal,
+  como pidió el usuario originalmente). En pares de modo *traducción*
+  (`en→ja`, `en→es`, `en→ko`, `es→ja`) la "canónica" del backend está
+  en idioma target y no es útil como "palabra buscada", por lo que el
+  helper `canonical_word_from_choices` cae al texto literal aunque el
+  flag esté activado — el frente siempre queda en idioma source.
+- Picker: nueva fila con checkbox "Frente" + combo del campo destino
+  del frente. La elección se persiste en `picker_last_fill_word` (no
+  pisa el global `fill_word_field` que rige el atajo rápido).
+- Tooltip de error si la opción está activada y el notetype actual no
+  tiene ningún campo del mapeo (la definición sí se inserta — la
+  ausencia del frente no la bloquea).
+
+### Cambiado
+- Firma interna de `do_lookup` y `do_lookup_auto` ahora también
+  devuelven la forma canónica del término (4-tupla en `do_lookup_auto`,
+  3-tupla en `do_lookup`). El reviewer la propaga al writer cuando
+  `fill_word_field` está activo.
+
 ## [1.4.6] - 2026-04-24
 
 ### Arreglado
