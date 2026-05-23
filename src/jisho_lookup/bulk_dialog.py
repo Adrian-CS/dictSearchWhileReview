@@ -9,6 +9,7 @@ from typing import List
 
 from aqt import mw
 from aqt.qt import (
+    QButtonGroup,
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -85,6 +86,9 @@ class BulkDialog(QDialog):
         self.radio_local = QRadioButton(tr("config.strategy.local_only"))
         self.radio_online = QRadioButton(tr("config.strategy.online_then_local"))
         self.radio_local.setChecked(True)
+        self._strat_group = QButtonGroup(self)
+        self._strat_group.addButton(self.radio_local)
+        self._strat_group.addButton(self.radio_online)
         strat_row.addWidget(self.radio_local)
         strat_row.addWidget(self.radio_online)
         strat_row.addStretch(1)
@@ -96,6 +100,9 @@ class BulkDialog(QDialog):
         self.radio_append = QRadioButton(tr("picker.append"))
         self.radio_overwrite = QRadioButton(tr("picker.overwrite"))
         self.radio_append.setChecked(True)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.addButton(self.radio_append)
+        self._mode_group.addButton(self.radio_overwrite)
         mode_row.addWidget(self.radio_append)
         mode_row.addWidget(self.radio_overwrite)
         mode_row.addStretch(1)
