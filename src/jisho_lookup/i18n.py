@@ -652,6 +652,11 @@ _STRINGS: Dict[str, Dict[str, str]] = {
         "es": "Modo de escritura:",
         "ja": "書き込みモード:",
     },
+    "bulk.max_senses": {
+        "en": "Definitions per word",
+        "es": "Definiciones por palabra",
+        "ja": "語ごとの定義数",
+    },
     "bulk.skip_existing": {
         "en": "Skip cards that already have a definition",
         "es": "Omitir tarjetas que ya tienen definición",

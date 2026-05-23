@@ -20,6 +20,7 @@ from aqt.qt import (
     QTextEdit,
     QCheckBox,
     QRadioButton,
+    QSpinBox,
     QApplication,
 )
 
@@ -112,6 +113,17 @@ class BulkDialog(QDialog):
         mode_row.addWidget(self.radio_overwrite)
         mode_row.addStretch(1)
         layout.addLayout(mode_row)
+
+        # Max definitions per word
+        senses_row = QHBoxLayout()
+        senses_row.addWidget(QLabel(tr("bulk.max_senses")))
+        self.senses_spin = QSpinBox()
+        self.senses_spin.setRange(1, 20)
+        self.senses_spin.setValue(3)
+        self.senses_spin.setFixedWidth(60)
+        senses_row.addWidget(self.senses_spin)
+        senses_row.addStretch(1)
+        layout.addLayout(senses_row)
 
         # Skip cards that already have content
         self.skip_check = QCheckBox(tr("bulk.skip_existing"))
@@ -224,9 +236,10 @@ class BulkDialog(QDialog):
         skip_existing = self.skip_check.isChecked()
 
         config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
-        # Override strategy to match the user's bulk choice.
+        # Override strategy and max_senses to match the user's bulk choices.
         bulk_config = dict(config)
         bulk_config["strategy"] = "jisho_then_local" if use_online else "local_only"
+        bulk_config["max_senses"] = self.senses_spin.value()
 
         escaped = deck_name.replace('"', '\\"')
         try:

@@ -46,6 +46,8 @@ _STOP_WORDS = {
 
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _SPLIT_RE = re.compile(r"[\s;,/\(\)\[\]]+")
+# Etiquetas de idioma fuente de JMdict: (eng:), (ale: Wort), (fra: mot), etc.
+_LANG_TAG_RE = re.compile(r"\s*\([a-z]{2,4}:[^)]*\)")
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +116,7 @@ def _flatten_glossary(raw) -> List[str]:
                     out.extend(_extract_text(item.get("content", "")))
                 elif "text" in item:
                     out.append(str(item["text"]))
-    return [s.strip() for s in out if s.strip()]
+    return [_LANG_TAG_RE.sub("", s).strip() for s in out if s.strip()]
 
 
 def read_entries(zip_path: str) -> List[list]:
