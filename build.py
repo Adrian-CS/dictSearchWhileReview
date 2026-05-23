@@ -22,6 +22,8 @@ DIST = os.path.join(ROOT, "dist")
 
 IGNORE_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache"}
 IGNORE_SUFFIXES = (".pyc", ".pyo")
+# User dictionaries (Yomichan/Yomitan ZIPs) are not redistributed
+_DICTS_SUBDIR = os.path.join("dictionaries", "")
 
 
 def _read_version() -> str:
@@ -37,6 +39,9 @@ def build(out_path: str) -> str:
             dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
             for fn in files:
                 if fn.endswith(IGNORE_SUFFIXES):
+                    continue
+                rel_dir = os.path.relpath(root, SRC)
+                if rel_dir.startswith("dictionaries") and fn.lower().endswith(".zip"):
                     continue
                 full = os.path.join(root, fn)
                 arc = os.path.relpath(full, SRC)
