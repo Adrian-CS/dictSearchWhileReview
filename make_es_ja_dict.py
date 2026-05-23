@@ -13,7 +13,9 @@ con resultados ordenados por relevancia y frecuencia:
 Uso:
     python make_es_ja_dict.py JMdict_spanish.zip [--out DEST.zip] [--top N]
 
-    --top N   Maximo de entradas japonesas por lema espanol (default: 15)
+    --top N            Maximo de entradas japonesas por lema espanol (default: 15)
+    --max-priority N   0=solo primera glosa exacta, 1=cualquier glosa exacta (default),
+                       2=incluye aparicion en primera glosa, 3=todo
 
 Coloca el ZIP resultante en src/jisho_lookup/dictionaries/ y reinicia Anki.
 """
@@ -159,23 +161,24 @@ def _match_priority(key: str, glosses: List[str]) -> int:
 # ---------------------------------------------------------------------------
 # Construccion del indice inverso
 
-# {es_word: {(expr_ja, read_ja): (priority, score)}}
-ReverseIdx = Dict[str, Dict[Tuple[str, str], Tuple[int, int]]]
+# {es_word: {(expr_ja, read_ja): (priority, gloss_count, score)}}
+# gloss_count = numero de glosas del entry ganador; menos glosas -> match mas especifico
+ReverseIdx = Dict[str, Dict[Tuple[str, str], Tuple[int, int, int]]]
 
 
 def _update(acc: ReverseIdx, key: str, expr: str, read: str,
-            score: int, priority: int) -> None:
+            score: int, priority: int, gloss_count: int) -> None:
     if not key or priority >= 99:
         return
     pair = (expr, read)
     existing = acc[key].get(pair)
     if existing is None:
-        acc[key][pair] = (priority, score)
+        acc[key][pair] = (priority, gloss_count, score)
     else:
-        prev_p, prev_s = existing
-        # Menor prioridad (numero mas bajo) gana; empate -> mayor frecuencia
-        if priority < prev_p or (priority == prev_p and score > prev_s):
-            acc[key][pair] = (priority, score)
+        prev_p, prev_gc, prev_s = existing
+        # Menor prioridad gana; empate -> mayor frecuencia; empate -> menos glosas (mas especifico)
+        if (priority, -score, gloss_count) < (prev_p, -prev_s, prev_gc):
+            acc[key][pair] = (priority, gloss_count, score)
 
 
 def build_reverse_index(entries: List[list]) -> ReverseIdx:
@@ -196,19 +199,21 @@ def build_reverse_index(entries: List[list]) -> ReverseIdx:
         if not glosses:
             continue
 
+        n = len(glosses)  # numero de glosas de este entry
+
         # Indexar por cada glosa (completa) y por cada palabra de cada glosa
         for gloss in glosses:
             # Clave: glosa completa normalizada
             for key in _key_variants(gloss):
                 if len(key) > 1 and key not in _STOP_WORDS:
                     p = _match_priority(key, glosses)
-                    _update(acc, key, expr, read, score, p)
+                    _update(acc, key, expr, read, score, p, n)
 
             # Clave: palabras individuales de la glosa
             for word in _word_set(gloss):
                 if len(word) > 1:
                     p = _match_priority(word, glosses)
-                    _update(acc, word, expr, read, score, p)
+                    _update(acc, word, expr, read, score, p, n)
 
     return acc
 
@@ -216,16 +221,22 @@ def build_reverse_index(entries: List[list]) -> ReverseIdx:
 # ---------------------------------------------------------------------------
 # Generacion del ZIP Yomitan
 
-def build_term_rows(reverse: ReverseIdx, top: int = 15) -> List[list]:
+def build_term_rows(reverse: ReverseIdx, top: int = 15,
+                    max_priority: int = 1) -> List[list]:
     rows: List[list] = []
     for es_word, scored in reverse.items():
         if not scored:
             continue
-        # Ordenar: (prioridad ASC, frecuencia DESC)
-        best = sorted(scored.items(), key=lambda x: (x[1][0], -x[1][1]))[:top]
+        # Filtrar por prioridad maxima (0=primera glosa exacta, 1=otra glosa exacta,
+        # 2=palabra en primera glosa, 3=palabra en otra glosa)
+        filtered = {pair: ps for pair, ps in scored.items() if ps[0] <= max_priority}
+        if not filtered:
+            continue
+        # Ordenar: (prioridad ASC, frecuencia DESC, glosas ASC)
+        best = sorted(filtered.items(), key=lambda x: (x[1][0], -x[1][2], x[1][1]))[:top]
 
         glossary: List[str] = []
-        for (expr, read), (prio, _score) in best:
+        for (expr, read), (prio, _gc, _score) in best:
             if read and read != expr:
                 glossary.append(f"{expr} [{read}]")
             else:
@@ -274,6 +285,9 @@ def main() -> int:
     parser.add_argument("--out", help="Ruta de salida (por defecto <stem>_reversed.zip)")
     parser.add_argument("--top", type=int, default=15,
                         help="Max entradas japonesas por lema (default: 15)")
+    parser.add_argument("--max-priority", type=int, default=1,
+                        help="0=solo primera glosa exacta, 1=cualquier glosa exacta (default), "
+                             "2=incluye palabra-en-glosa, 3=todo")
     args = parser.parse_args()
 
     in_path = args.zip_in
@@ -290,12 +304,12 @@ def main() -> int:
     entries = read_entries(in_path)
     print(f"  {len(entries):,} entradas japonesas.")
 
-    print(f"Construyendo indice inverso (top {args.top}, con prioridad de glosa)...")
+    print(f"Construyendo indice inverso (top {args.top}, max-priority {args.max_priority})...")
     reverse = build_reverse_index(entries)
     print(f"  {len(reverse):,} lemas espanoles indexados.")
 
     print("Generando filas term_bank...")
-    rows = build_term_rows(reverse, top=args.top)
+    rows = build_term_rows(reverse, top=args.top, max_priority=args.max_priority)
 
     print(f"Escribiendo {out_path}...")
     write_zip(rows, out_path, stem + " (ES->JA reversed)")
