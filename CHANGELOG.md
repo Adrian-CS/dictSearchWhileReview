@@ -3,6 +3,20 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.6.3] - 2026-05-23
+
+### Corregido
+- **Diccionario ES→JA — préstamos no encontrados** (`alcohol`, `vitamina`,
+  etc.): JMdict incluye anotaciones de idioma origen como `(eng:)` o
+  `(ale: Wort)` en las glosas. Ahora se eliminan antes de indexar, por lo
+  que `'alcohol (eng:)'` se trata como `'alcohol'` y obtiene coincidencia
+  exacta (P0) en lugar de ser excluido por el filtro `--max-priority 1`.
+
+### Añadido
+- **Bulk — selector «Definiciones por palabra»** (1–20, por defecto 3):
+  controla cuántas acepciones se insertan por nota, de forma independiente
+  al ajuste global `max_senses` de la configuración.
+
 ## [1.6.2] - 2026-05-23
 
 ### Corregido
