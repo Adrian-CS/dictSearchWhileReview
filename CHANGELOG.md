@@ -3,6 +3,17 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.6.4] - 2026-05-23
+
+### Herramienta `make_es_ja_dict.py`
+- **Calificadores entre paréntesis eliminados**: además de las etiquetas de
+  idioma `(eng:)`, ahora se eliminan todos los paréntesis de contexto antes
+  de indexar — `"condado (de China)"` se trata como `"condado"` y pasa a
+  coincidir con 県 como P0.
+- **Plurales españoles**: `_match_priority` y `_key_variants` ahora
+  comparan también la forma singular del plural (`cigarrillos → cigarrillo`),
+  por lo que 煙草 aparece para "cigarrillo" con prioridad P1.
+
 ## [1.6.3] - 2026-05-23
 
 ### Corregido

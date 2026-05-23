@@ -46,8 +46,8 @@ _STOP_WORDS = {
 
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _SPLIT_RE = re.compile(r"[\s;,/\(\)\[\]]+")
-# Etiquetas de idioma fuente de JMdict: (eng:), (ale: Wort), (fra: mot), etc.
-_LANG_TAG_RE = re.compile(r"\s*\([a-z]{2,4}:[^)]*\)")
+# Calificadores entre parentesis de JMdict: (de China), (eng:), (formal), etc.
+_PAREN_RE = re.compile(r"\s*\([^)]*\)")
 
 
 # ---------------------------------------------------------------------------
@@ -65,11 +65,21 @@ def _strip_accents(text: str) -> str:
     )
 
 
+def _to_singular(word: str) -> str:
+    """Singular espanol aproximado: cigarrillos->cigarrillo, casas->casa."""
+    if len(word) > 4 and word.endswith("es"):
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s"):
+        return word[:-1]
+    return word
+
+
 def _key_variants(word: str) -> List[str]:
-    """Devuelve la palabra normalizada y, si difiere, tambien sin acentos."""
+    """Devuelve variantes normalizadas: con/sin acento y singular si es plural."""
     w = _nfc(word.strip().lower())
     ws = _strip_accents(w)
-    return list(dict.fromkeys([w, ws]))   # dedup manteniendo orden
+    variants = [w, ws, _to_singular(w), _to_singular(ws)]
+    return list(dict.fromkeys(variants))   # dedup manteniendo orden
 
 
 def _word_set(text: str) -> Set[str]:
@@ -116,7 +126,7 @@ def _flatten_glossary(raw) -> List[str]:
                     out.extend(_extract_text(item.get("content", "")))
                 elif "text" in item:
                     out.append(str(item["text"]))
-    return [_LANG_TAG_RE.sub("", s).strip() for s in out if s.strip()]
+    return [_PAREN_RE.sub("", s).strip() for s in out if s.strip()]
 
 
 def read_entries(zip_path: str) -> List[list]:
@@ -145,12 +155,16 @@ def _match_priority(key: str, glosses: List[str]) -> int:
     """
     if not glosses:
         return 99
-    first_lower = _nfc(glosses[0].strip().lower())
-    if first_lower == key or _strip_accents(first_lower) == key:
+
+    def _matches(g: str) -> bool:
+        gl = _nfc(g.strip().lower())
+        gls = _strip_accents(gl)
+        return key in (gl, gls, _to_singular(gl), _to_singular(gls))
+
+    if _matches(glosses[0]):
         return 0
     for gloss in glosses[1:]:
-        gloss_lower = _nfc(gloss.strip().lower())
-        if gloss_lower == key or _strip_accents(gloss_lower) == key:
+        if _matches(gloss):
             return 1
     if key in _word_set(glosses[0]):
         return 2
