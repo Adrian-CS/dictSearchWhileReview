@@ -3,6 +3,32 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.6.2] - 2026-05-23
+
+### Corregido
+- **Bulk — 0 resultados cuando el campo palabra contiene `[sound:…]`**:
+  el campo se enviaba tal cual (`actitud [sound:1161798516_word_es.mp3]`)
+  y no coincidía con ninguna entrada del diccionario. Ahora se eliminan
+  las anotaciones entre corchetes de Anki (sound, furigana, etc.) y las
+  etiquetas HTML antes de hacer la búsqueda.
+- **`build.py` incluía los ZIPs de usuario** en el `.ankiaddon` (1,6 MB
+  en lugar de ~53 KB). Los ficheros `.zip` de `dictionaries/` quedan
+  ahora excluidos del empaquetado.
+
+### Añadido
+- **Bulk — log de palabras no encontradas**: cada palabra sin resultado
+  se imprime en el log (`✗ palabra`) en tiempo real. El área de texto
+  ya tiene scroll, por lo que se puede revisar la lista completa al acabar.
+
+### Herramienta `make_es_ja_dict.py`
+- **Ordenación mejorada**: dentro de la misma prioridad, primero se
+  ordena por frecuencia JMdict (score) y como desempate final por número
+  de glosas (menos glosas = traducción más exclusiva). Resultado: `技能`
+  aparece antes que `歳` para *habilidad*.
+- **Flag `--max-priority`** (por defecto `1`): excluye entradas donde
+  la palabra española solo aparece *dentro* de una glosa más larga
+  (prioridad 2-3), eliminando falsos positivos como `歳` por "habilidad".
+
 ## [1.6.1] - 2026-05-23
 
 ### Corregido

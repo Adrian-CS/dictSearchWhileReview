@@ -320,9 +320,9 @@ class BulkDialog(QDialog):
 
             if not html:
                 not_found += 1
+                self._log(f"  ✗ {word}")
                 self.progress.setValue(i + 1)
-                if i % 20 == 0:
-                    QApplication.processEvents()
+                QApplication.processEvents()
                 continue
 
             if existing and not overwrite:
