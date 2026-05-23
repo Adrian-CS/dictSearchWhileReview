@@ -109,12 +109,11 @@ class BulkDialog(QDialog):
     def _populate_decks(self) -> None:
         self.deck_combo.clear()
         try:
-            pairs = sorted(mw.col.decks.all_names_and_ids(), key=lambda x: x[0])
+            for deck in sorted(mw.col.decks.all_names_and_ids(), key=lambda d: d.name):
+                self.deck_combo.addItem(deck.name, deck.id)
         except Exception:
-            pairs = []
-        for name, did in pairs:
-            self.deck_combo.addItem(name, did)
-        if pairs:
+            pass
+        if self.deck_combo.count() > 0:
             self._on_deck_changed()
 
     def _on_deck_changed(self) -> None:

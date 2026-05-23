@@ -39,6 +39,12 @@ Compatible with **Anki 2.1.60+** (Qt6).
   Daijirin, Shinmeikai, etc.). They are indexed on Anki startup.
 - *Replace* / *Append* modes, configurable globally and per-use.
 - Asynchronous: HTTP requests don't freeze the UI.
+- **Bulk definition fill** (`Tools → Jisho Lookup → Add definitions in
+  bulk…`): populate a definition field for every note in a deck at once
+  using local Yomichan/Yomitan dictionaries. Choose the word field,
+  the target field, append or overwrite mode, and whether to skip cards
+  that already have content. Includes a progress bar and a results
+  summary (found / not found / skipped).
 - Menu actions **Search selection now** (`Ctrl+Shift+J`) and
   **Pick definition (popup)…** (`Ctrl+Shift+K`) as manual fallbacks.
 - **Fully localized UI** — menus, dialogs and tooltips follow Anki's
@@ -90,6 +96,22 @@ Copy or symlink `src/jisho_lookup/` into Anki's `addons21` folder:
 If nothing happens, use `Ctrl+Shift+J` / `Ctrl+Shift+K` (menu
 **Tools → Jisho Lookup**) as a manual fallback to rule out
 shortcut-capture issues.
+
+### Bulk fill a whole deck
+
+Go to `Tools → Jisho Lookup → Add definitions in bulk…`:
+
+1. Select the **deck** you want to fill.
+2. Choose the **word field** (the field that already contains the word
+   to look up) and the **definition field** (where to write the result).
+3. Pick **Append** or **Overwrite** and whether to skip cards that
+   already have a definition.
+4. Click **Start**. A progress bar and a log show results in real time.
+   Click **Cancel** at any time to stop mid-run.
+
+> Bulk fill uses only local dictionaries (Yomichan/Yomitan ZIPs). Make
+> sure you have at least one ZIP in the `dictionaries/` folder and that
+> it is enabled in the configuration.
 
 ## Configuration
 
@@ -187,6 +209,7 @@ The brand name "Jisho Lookup" is kept across all three languages.
 │       ├── yomitan_reader.py# Yomichan/Yomitan ZIP parser
 │       ├── picker_dialog.py # Qt picker popup
 │       ├── config_dialog.py # Qt config dialog
+│       ├── bulk_dialog.py   # Qt bulk-fill dialog
 │       └── dictionaries/    # user ZIPs (gitignored)
 ├── build.py                 # bundles src/ → dist/*.ankiaddon
 ├── .github/workflows/
