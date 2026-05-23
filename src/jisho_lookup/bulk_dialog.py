@@ -258,6 +258,22 @@ class BulkDialog(QDialog):
         skip_existing: bool,
         config: dict,
     ) -> None:
+        # Show which local dicts are loaded so the user can diagnose problems.
+        try:
+            enabled = config.get("enabled_local_dicts") or []
+            mgr = lookup.get_dict_manager(enabled=enabled if enabled else None)
+            dict_names = [d.name for d in mgr.dicts] if mgr.dicts else []
+            if not dict_names:
+                # discover() may not have run yet
+                mgr.discover()
+                dict_names = [d.name for d in mgr.dicts]
+            if dict_names:
+                self._log(f"Dicts: {', '.join(dict_names)}")
+            else:
+                self._log("No local dicts found in dictionaries/ folder.")
+        except Exception:
+            pass
+
         found = skipped = not_found = 0
 
         for i, nid in enumerate(note_ids):
