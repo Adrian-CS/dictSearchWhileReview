@@ -624,4 +624,58 @@ _STRINGS: Dict[str, Dict[str, str]] = {
         "es": "mezcla de fuentes",
         "ja": "複数のソース",
     },
+
+    # ------------------------------------------------------------- bulk
+    "menu.bulk": {
+        "en": "Add definitions in bulk…",
+        "es": "Añadir definiciones en bulk…",
+        "ja": "まとめて定義を追加…",
+    },
+    "bulk.window_title": {
+        "en": "Jisho Lookup — Bulk Definitions",
+        "es": "Jisho Lookup — Definiciones en bulk",
+        "ja": "Jisho Lookup — まとめて定義追加",
+    },
+    "bulk.deck": {"en": "Deck:", "es": "Mazo:", "ja": "デッキ:"},
+    "bulk.source_field": {
+        "en": "Word field:",
+        "es": "Campo de palabra:",
+        "ja": "単語フィールド:",
+    },
+    "bulk.target_field": {
+        "en": "Definition field:",
+        "es": "Campo de definición:",
+        "ja": "定義フィールド:",
+    },
+    "bulk.mode": {
+        "en": "Write mode:",
+        "es": "Modo de escritura:",
+        "ja": "書き込みモード:",
+    },
+    "bulk.skip_existing": {
+        "en": "Skip cards that already have a definition",
+        "es": "Omitir tarjetas que ya tienen definición",
+        "ja": "定義が既にあるカードはスキップ",
+    },
+    "bulk.start": {"en": "Start", "es": "Iniciar", "ja": "開始"},
+    "bulk.no_notes": {
+        "en": "No notes found in this deck.",
+        "es": "No se encontraron notas en este mazo.",
+        "ja": "このデッキにノートが見つかりません。",
+    },
+    "bulk.starting": {
+        "en": "Starting bulk lookup ({total} notes)…",
+        "es": "Iniciando búsqueda en bulk ({total} notas)…",
+        "ja": "まとめて検索を開始({total} ノート)…",
+    },
+    "bulk.cancelled": {
+        "en": "Cancelled.",
+        "es": "Cancelado.",
+        "ja": "キャンセルしました。",
+    },
+    "bulk.done": {
+        "en": "Done. Found: {found} · Not found: {not_found} · Skipped: {skipped}.",
+        "es": "Completado. Encontrado: {found} · No encontrado: {not_found} · Omitido: {skipped}.",
+        "ja": "完了。見つかった:{found} · 見つからない:{not_found} · スキップ:{skipped}。",
+    },
 }

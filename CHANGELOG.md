@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.6.0] - 2026-05-23
+
+### Añadido
+- **Definiciones en bulk** (`Herramientas → Jisho Lookup → Añadir
+  definiciones en bulk…`). Permite seleccionar un mazo, el campo que
+  contiene la palabra y el campo destino donde se escribe la definición,
+  y rellenar todas las notas del mazo de una vez usando los diccionarios
+  locales Yomichan/Yomitan. Incluye barra de progreso, log de
+  resultados (encontradas / no encontradas / omitidas) y botón Cancelar
+  que detiene el proceso en curso.
+- Opciones del diálogo bulk: modo **Añadir** (append) u **Sustituir**
+  (overwrite), y checkbox para omitir tarjetas que ya tienen contenido
+  en el campo destino.
+- Detección automática de campos disponibles en el mazo seleccionado
+  (compatible con mazos que mezclan varios note types).
+
 ## [1.5.0] - 2026-04-24
 
 ### Añadido

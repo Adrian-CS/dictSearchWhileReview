@@ -14,6 +14,7 @@ from aqt.qt import QAction, QKeySequence
 
 from . import reviewer
 from . import config_dialog
+from . import bulk_dialog
 from .i18n import tr
 
 
@@ -30,6 +31,10 @@ def _on_pick_now() -> None:
     reviewer.pick_from_menu()
 
 
+def _on_bulk() -> None:
+    bulk_dialog.open_bulk_dialog()
+
+
 def _build_menu() -> None:
     # "Jisho Lookup" se mantiene en los tres idiomas (marca).
     menu = mw.form.menuTools.addMenu(tr("common.addon_name"))
@@ -43,6 +48,10 @@ def _build_menu() -> None:
     act_pick.setShortcut(QKeySequence("Ctrl+Shift+K"))
     act_pick.triggered.connect(_on_pick_now)
     menu.addAction(act_pick)
+
+    act_bulk = QAction(tr("menu.bulk"), mw)
+    act_bulk.triggered.connect(_on_bulk)
+    menu.addAction(act_bulk)
 
     menu.addSeparator()
 
