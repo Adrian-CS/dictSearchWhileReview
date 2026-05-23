@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Diálogo para añadir definiciones en bulk a un mazo (solo diccionarios locales)."""
+"""Diálogo para añadir definiciones en bulk a un mazo."""
 
 from __future__ import annotations
 
 import re
+import time
 from typing import List
 
 from aqt import mw
@@ -21,8 +22,11 @@ from aqt.qt import (
     QApplication,
 )
 
-from . import lookup, yomitan_reader
+from . import lang, lookup
 from .i18n import tr
+
+# Pausa entre peticiones online para no saturar Jisho/Wiktionary.
+_ONLINE_DELAY_S = 0.5
 
 
 def _strip_html(text: str) -> str:
@@ -33,7 +37,7 @@ class BulkDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("bulk.window_title"))
-        self.resize(480, 500)
+        self.resize(500, 540)
         self._running = False
         self._cancel_flag = False
         self._build_ui()
@@ -66,6 +70,26 @@ class BulkDialog(QDialog):
         tgt_row.addWidget(self.tgt_combo, 1)
         layout.addLayout(tgt_row)
 
+        # Language pair
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel(tr("picker.language")))
+        self.lang_combo = QComboBox()
+        for pid in lang.all_pair_ids():
+            self.lang_combo.addItem(lang.pair_label(pid), pid)
+        lang_row.addWidget(self.lang_combo, 1)
+        layout.addLayout(lang_row)
+
+        # Strategy
+        strat_row = QHBoxLayout()
+        strat_row.addWidget(QLabel(tr("config.strategy")))
+        self.radio_local = QRadioButton(tr("config.strategy.local_only"))
+        self.radio_online = QRadioButton(tr("config.strategy.online_then_local"))
+        self.radio_local.setChecked(True)
+        strat_row.addWidget(self.radio_local)
+        strat_row.addWidget(self.radio_online)
+        strat_row.addStretch(1)
+        layout.addLayout(strat_row)
+
         # Write mode
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel(tr("bulk.mode")))
@@ -90,7 +114,7 @@ class BulkDialog(QDialog):
         # Log
         self.log_edit = QTextEdit()
         self.log_edit.setReadOnly(True)
-        self.log_edit.setMinimumHeight(120)
+        self.log_edit.setMinimumHeight(100)
         layout.addWidget(self.log_edit)
 
         # Buttons
@@ -113,6 +137,15 @@ class BulkDialog(QDialog):
                 self.deck_combo.addItem(deck.name, deck.id)
         except Exception:
             pass
+
+        # Set language pair to global default
+        config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
+        default_pair = lang.normalize_pair(config.get("language_pair"))
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == default_pair:
+                self.lang_combo.setCurrentIndex(i)
+                break
+
         if self.deck_combo.count() > 0:
             self._on_deck_changed()
 
@@ -173,13 +206,15 @@ class BulkDialog(QDialog):
         if not deck_name or not src_field or not tgt_field:
             return
 
+        pair_id = self.lang_combo.currentData()
+        use_online = self.radio_online.isChecked()
         overwrite = self.radio_overwrite.isChecked()
         skip_existing = self.skip_check.isChecked()
 
         config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
-        enabled_dicts = config.get("enabled_local_dicts") or []
-        max_senses = int(config.get("max_senses") or 3)
-        include_reading = bool(config.get("include_reading", True))
+        # Override strategy to match the user's bulk choice.
+        bulk_config = dict(config)
+        bulk_config["strategy"] = "jisho_then_local" if use_online else "local_only"
 
         escaped = deck_name.replace('"', '\\"')
         try:
@@ -203,7 +238,7 @@ class BulkDialog(QDialog):
 
         self._run_bulk(
             note_ids, src_field, tgt_field,
-            overwrite, skip_existing, enabled_dicts, max_senses, include_reading,
+            pair_id, overwrite, skip_existing, bulk_config,
         )
 
     def _run_bulk(
@@ -211,14 +246,11 @@ class BulkDialog(QDialog):
         note_ids: List[int],
         src_field: str,
         tgt_field: str,
+        pair_id: str,
         overwrite: bool,
         skip_existing: bool,
-        enabled_dicts: List[str],
-        max_senses: int,
-        include_reading: bool,
+        config: dict,
     ) -> None:
-        mgr = lookup.get_dict_manager(enabled=enabled_dicts if enabled_dicts else None)
-
         found = skipped = not_found = 0
 
         for i, nid in enumerate(note_ids):
@@ -250,22 +282,19 @@ class BulkDialog(QDialog):
                 self.progress.setValue(i + 1)
                 continue
 
-            word_clean = lookup.normalize_query(word)
-            local = mgr.lookup(word_clean)
-
-            if not local:
-                not_found += 1
-                self.progress.setValue(i + 1)
-                if i % 50 == 0:
-                    QApplication.processEvents()
-                continue
-
-            html = yomitan_reader.format_local_entries(
-                local, max_senses=max_senses, include_reading=include_reading
+            html, source, _ = lookup.do_lookup(
+                lookup.normalize_query(word), config, pair=pair_id
             )
+
+            # Rate-limit online sources to avoid being blocked.
+            if source in ("jisho", "wiktionary"):
+                time.sleep(_ONLINE_DELAY_S)
+
             if not html:
                 not_found += 1
                 self.progress.setValue(i + 1)
+                if i % 20 == 0:
+                    QApplication.processEvents()
                 continue
 
             if existing and not overwrite:
@@ -283,7 +312,7 @@ class BulkDialog(QDialog):
 
             found += 1
             self.progress.setValue(i + 1)
-            if i % 50 == 0:
+            if i % 20 == 0:
                 QApplication.processEvents()
 
         self._log(tr("bulk.done", found=found, not_found=not_found, skipped=skipped))
