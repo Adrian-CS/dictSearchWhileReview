@@ -3,6 +3,31 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y versionado con [SemVer](https://semver.org/lang/es/).
 
+## [1.6.1] - 2026-05-23
+
+### Corregido
+- **Bulk — dropdowns de mazo vacíos**: `all_names_and_ids()` devuelve
+  objetos protobuf con atributos `.name`/`.id`, no tuplas indexables.
+  El intento de indexar con `x[0]` lanzaba `TypeError` silenciado,
+  dejando el combo vacío.
+- **Bulk — radio buttons interfieren entre sí**: los cuatro
+  `QRadioButton` del diálogo compartían el mismo grupo exclusivo
+  implícito (mismo parent), así que seleccionar "Replace" deseleccionaba
+  "Local only" y viceversa. Ahora cada par tiene su propio
+  `QButtonGroup`.
+- **Bulk — 0 resultados para palabras en español (y otros idiomas
+  no-japoneses)**: el lookup directo a `mgr.lookup()` solo busca en
+  índices de expresiones Yomichan/Yomitan (japonés/coreano). Ahora se
+  usa `do_lookup()` que enruta correctamente según el par de idioma
+  elegido.
+
+### Añadido
+- **Bulk — selector de par de idioma**: combo que por defecto toma el
+  par global configurado, pero puede cambiarse por cada sesión de bulk.
+- **Bulk — selector de estrategia**: `Solo local` (por defecto) /
+  `Online → Local (fallback)`. En modo online se aplica un delay de
+  0,5 s entre peticiones para no saturar Jisho/Wiktionary.
+
 ## [1.6.0] - 2026-05-23
 
 ### Añadido
