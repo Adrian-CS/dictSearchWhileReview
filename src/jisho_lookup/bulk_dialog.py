@@ -30,8 +30,13 @@ from .i18n import tr
 _ONLINE_DELAY_S = 0.5
 
 
+_ANKI_BRACKET_RE = re.compile(r"\[[^\]]*\]")
+
+
 def _strip_html(text: str) -> str:
-    return re.sub(r"<[^>]+>", "", text).strip()
+    text = re.sub(r"<[^>]+>", "", text)
+    text = _ANKI_BRACKET_RE.sub("", text)
+    return text.strip()
 
 
 class BulkDialog(QDialog):
